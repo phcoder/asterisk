@@ -2694,10 +2694,12 @@ AC_CHECK_FUNC([crypt], [SYSCRYPT=true], [SYSCRYPT=""])
 if test "x$LIBCRYPT_LIB" != "x" ; then
     CRYPT_LIB="$LIBCRYPT_LIB"
     CRYPT_INCLUDE="$LIBCRYPT_INCLUDE"
+    PBX_CRYPT=1
     AC_DEFINE([HAVE_CRYPT], [1], [Define to 1 if you have the 'crypt' function.])
 elif test "x$SYSCRYPT" != "x" ; then
     CRYPT_LIB=""
     CRYPT_INCLUDE=""
+    PBX_CRYPT=1
     AC_DEFINE([HAVE_CRYPT], [1], [Define to 1 if you have the 'crypt' function.])
 fi
 
