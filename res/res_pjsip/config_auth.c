@@ -63,6 +63,8 @@ static int auth_type_handler(const struct aco_option *opt, struct ast_variable *
 		ast_log(LOG_WARNING, "OAuth support is not available in the version of PJSIP in use\n");
 		return -1;
 #endif
+	} else if (!strcasecmp(var->value, "ims_aka")) {
+		auth->type = AST_SIP_AUTH_TYPE_IMS_AKA;
 	} else {
 		ast_log(LOG_WARNING, "Unknown authentication storage type '%s' specified for %s\n",
 				var->value, var->name);
@@ -74,7 +76,8 @@ static int auth_type_handler(const struct aco_option *opt, struct ast_variable *
 static const char *auth_types_map[] = {
 	[AST_SIP_AUTH_TYPE_USER_PASS] = "userpass",
 	[AST_SIP_AUTH_TYPE_MD5] = "md5",
-	[AST_SIP_AUTH_TYPE_GOOGLE_OAUTH] = "google_oauth"
+	[AST_SIP_AUTH_TYPE_GOOGLE_OAUTH] = "google_oauth",
+	[AST_SIP_AUTH_TYPE_IMS_AKA] = "ims_aka"
 };
 
 const char *ast_sip_auth_type_to_str(enum ast_sip_auth_type type)
@@ -126,6 +129,7 @@ static int auth_apply(const struct ast_sorcery *sorcery, void *obj)
 		break;
 	case AST_SIP_AUTH_TYPE_USER_PASS:
 	case AST_SIP_AUTH_TYPE_ARTIFICIAL:
+	case AST_SIP_AUTH_TYPE_IMS_AKA:
 		break;
 	}
 
@@ -395,6 +399,14 @@ int ast_sip_initialize_sorcery_auth(void)
 			"", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_auth, realm));
 	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_AUTH_TYPE, "nonce_lifetime",
 			"32", OPT_UINT_T, 0, FLDSET(struct ast_sip_auth, nonce_lifetime));
+	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_AUTH_TYPE, "usim_ami",
+			"no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_auth, usim_ami));
+	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_AUTH_TYPE, "usim_opc",
+			"", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_auth, usim_opc));
+	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_AUTH_TYPE, "usim_k",
+			"", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_auth, usim_k));
+	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_AUTH_TYPE, "usim_sqn",
+			"", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_auth, usim_sqn));
 	ast_sorcery_object_field_register_custom(sorcery, SIP_SORCERY_AUTH_TYPE, "auth_type",
 			"userpass", auth_type_handler, auth_type_to_str, NULL, 0, 0);
 

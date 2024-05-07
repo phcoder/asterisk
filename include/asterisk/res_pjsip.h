@@ -563,7 +563,9 @@ enum ast_sip_auth_type {
 	/*! Google Oauth */
 	AST_SIP_AUTH_TYPE_GOOGLE_OAUTH,
 	/*! Credentials not stored this is a fake auth */
-	AST_SIP_AUTH_TYPE_ARTIFICIAL
+	AST_SIP_AUTH_TYPE_ARTIFICIAL,
+	/*! Credentials stored as a username and RES combination */
+	AST_SIP_AUTH_TYPE_IMS_AKA
 };
 
 #define SIP_SORCERY_AUTH_TYPE "auth"
@@ -578,6 +580,9 @@ struct ast_sip_auth {
 		AST_STRING_FIELD(auth_user);
 		/*! Authentication password */
 		AST_STRING_FIELD(auth_pass);
+		/*! IMS Authentication password */
+		char ims_res[8];
+		int ims_res_len;
 		/*! Authentication credentials in MD5 format (hash of user:realm:pass) */
 		AST_STRING_FIELD(md5_creds);
 		/*! Refresh token to use for OAuth authentication */
@@ -586,7 +591,13 @@ struct ast_sip_auth {
 		AST_STRING_FIELD(oauth_clientid);
 		/*! Secret to use for OAuth authentication */
 		AST_STRING_FIELD(oauth_secret);
+		/*! Use USIM emulation with these parameters */
+		AST_STRING_FIELD(usim_opc);
+		AST_STRING_FIELD(usim_k);
+		AST_STRING_FIELD(usim_sqn);
 	);
+	/*! Use AMI interface for communication with USIM (instead of emulation) */
+	unsigned int usim_ami;
 	/*! The time period (in seconds) that a nonce may be reused */
 	unsigned int nonce_lifetime;
 	/*! Used to determine what to use when authenticating */
