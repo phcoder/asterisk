@@ -3992,7 +3992,6 @@ static int new_invite(struct new_invite *invite)
 	char buffer[AST_SOCKADDR_BUFLEN];
 	SCOPE_ENTER(3, "%s\n", ast_sip_session_get_name(invite->session));
 
-
 	/* From this point on, any calls to pjsip_inv_terminate have the last argument as PJ_TRUE
 	 * so that we will be notified so we can destroy the session properly
 	 */

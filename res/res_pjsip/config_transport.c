@@ -997,6 +997,29 @@ static int transport_tls_file_handler(const struct aco_option *opt, struct ast_v
 	return 0;
 }
 
+/*! \brief Custom handler for P-Access-Network info setting */
+static int transport_p_access_network_info(const struct aco_option *opt, struct ast_variable *var, void *obj)
+{
+	struct ast_sip_transport *transport = obj;
+	RAII_VAR(struct ast_sip_transport_state *, state, find_or_create_temporary_state(transport), ao2_cleanup);
+
+	if (!state) {
+		return -1;
+	}
+
+	if (!strcasecmp(var->name, "p_access_network_info")) {
+		/* Copy configured P-Access-Network-Info to transport state. May be chaned via AMI any time. */
+		if (strlen(var->value) < sizeof(state->volte.p_access_network_info)) {
+			strcpy(state->volte.p_access_network_info, var->value);
+		} else {
+			ast_log(LOG_ERROR, "P-Access-Network-Info in transport '%s' is too long.\n",
+				ast_sorcery_object_get_id(transport));
+		}
+	}
+
+	return 0;
+}
+
 static int ca_list_file_to_str(const void *obj, const intptr_t *args, char **buf)
 {
 	const struct ast_sip_transport *transport = obj;
@@ -1769,6 +1792,11 @@ int ast_sip_initialize_sorcery_transport(void)
 	ast_sorcery_object_field_register(sorcery, "transport", "websocket_write_timeout", AST_DEFAULT_WEBSOCKET_WRITE_TIMEOUT_STR, OPT_INT_T, PARSE_IN_RANGE, FLDSET(struct ast_sip_transport, write_timeout), 1, INT_MAX);
 	ast_sorcery_object_field_register(sorcery, "transport", "allow_reload", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_transport, allow_reload));
 	ast_sorcery_object_field_register(sorcery, "transport", "symmetric_transport", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_transport, symmetric_transport));
+	ast_sorcery_object_field_register(sorcery, "transport", "sec_port_c_min", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_transport, sec_port_c_min));
+	ast_sorcery_object_field_register(sorcery, "transport", "sec_port_c_max", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_transport, sec_port_c_max));
+	ast_sorcery_object_field_register(sorcery, "transport", "sec_port_s_min", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_transport, sec_port_s_min));
+	ast_sorcery_object_field_register(sorcery, "transport", "sec_port_s_max", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_transport, sec_port_s_max));
+	ast_sorcery_object_field_register_custom(sorcery, "transport", "p_access_network_info", "", transport_p_access_network_info, privkey_file_to_str, NULL, 0, 0);
 
 	ast_sip_register_endpoint_formatter(&endpoint_transport_formatter);
 

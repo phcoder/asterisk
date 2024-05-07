@@ -114,6 +114,36 @@ AST_VECTOR(ast_sip_service_route_vector, char *);
 static const pj_str_t AST_PJ_STR_EMPTY = { "", 0 };
 
 /*!
+ * \brief Local ports for client and server to use with IMS
+ */
+struct ast_sip_transport_volte {
+	/*! Current local ports used */
+	int local_port_c, local_port_s;
+	/*! Current states for sec-agree */
+	pj_sockaddr local_addr_c, remote_addr_s;
+	pj_sockaddr remote_addr_c, local_addr_s;
+	uint32_t local_spi_c, remote_spi_s;
+	uint32_t remote_spi_c, local_spi_s;
+	pj_bool_t local_sa_c_set, remote_sa_s_set;
+	pj_bool_t remote_sa_c_set, local_sa_s_set;
+	pj_bool_t local_sp_c_set, remote_sp_s_set;
+	pj_bool_t remote_sp_c_set, local_sp_s_set;
+	pj_sockaddr local_addr_orig, remote_addr_orig;
+	char security_server[1024];
+	/*! Transport that was used (for reset) */
+	struct pjsip_transport	*transport;
+	/*! Assigned URI */
+	char p_associated_uri[1024];
+	/*! Access Network Info */
+	char p_access_network_info[1024];
+	/*! Authorization header from last REGISTER */
+	char authorization[1024];
+	/*! cnonce + nc from REGISTER */
+	char cnonce[256];
+	uint32_t nc;
+};
+
+/*!
  * \brief Structure for SIP transport information
  */
 struct ast_sip_transport_state {
@@ -207,6 +237,8 @@ struct ast_sip_transport_state {
 	 */
 	struct stat privkey_file_stat;
 #endif
+	/*! VoLTE specific settings and states */
+	struct ast_sip_transport_volte volte;
 };
 
 #define ast_sip_transport_is_nonlocal(transport_state, addr) \
@@ -299,6 +331,9 @@ struct ast_sip_transport {
 	int symmetric_transport;
 	/*! This is a flow to another target */
 	int flow;
+	/*! Settings for local ports */
+	int sec_port_c_min, sec_port_c_max;
+	int sec_port_s_min, sec_port_s_max;
 };
 
 #define SIP_SORCERY_DOMAIN_ALIAS_TYPE "domain_alias"
@@ -581,8 +616,12 @@ struct ast_sip_auth {
 		/*! Authentication password */
 		AST_STRING_FIELD(auth_pass);
 		/*! IMS Authentication password */
-		char ims_res[8];
+		char ims_res[16];
 		int ims_res_len;
+		/*! IMS Authentication cnonce+nc */
+		char ims_cnonce[256];
+		int ims_cnonce_len;
+		uint32_t ims_nc;
 		/*! Authentication credentials in MD5 format (hash of user:realm:pass) */
 		AST_STRING_FIELD(md5_creds);
 		/*! Refresh token to use for OAuth authentication */
@@ -598,6 +637,8 @@ struct ast_sip_auth {
 	);
 	/*! Use AMI interface for communication with USIM (instead of emulation) */
 	unsigned int usim_ami;
+	/*! Use XOR algorithm instead of Milenage */
+	unsigned int usim_xor;
 	/*! The time period (in seconds) that a nonce may be reused */
 	unsigned int nonce_lifetime;
 	/*! Used to determine what to use when authenticating */
@@ -4208,5 +4249,7 @@ const int ast_sip_hangup_sip2cause(int cause);
  * \retval -1 if matching code not found
  */
 int ast_sip_str2rc(const char *name);
+
+extern unsigned char *volte_auth;
 
 #endif /* _RES_PJSIP_H */

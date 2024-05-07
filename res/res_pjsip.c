@@ -4095,3 +4095,5 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_
 	.requires = "dnsmgr,res_pjproject,res_sorcery_config,res_sorcery_memory,res_sorcery_astdb",
 	.optional_modules = "res_geolocation,res_statsd",
 );
+
+unsigned char *volte_auth = NULL;

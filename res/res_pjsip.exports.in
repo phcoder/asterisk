@@ -6,6 +6,7 @@
 		LINKER_SYMBOL_PREFIXast_copy_pj_str;
 		LINKER_SYMBOL_PREFIXast_copy_pj_str2;
 		LINKER_SYMBOL_PREFIXast_pjsip_rdata_get_endpoint;
+		LINKER_SYMBOL_PREFIXvolte_auth;
 	local:
 		*;
 };

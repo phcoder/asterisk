@@ -401,6 +401,8 @@ int ast_sip_initialize_sorcery_auth(void)
 			"32", OPT_UINT_T, 0, FLDSET(struct ast_sip_auth, nonce_lifetime));
 	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_AUTH_TYPE, "usim_ami",
 			"no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_auth, usim_ami));
+	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_AUTH_TYPE, "usim_xor",
+			"no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_auth, usim_xor));
 	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_AUTH_TYPE, "usim_opc",
 			"", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_auth, usim_opc));
 	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_AUTH_TYPE, "usim_k",

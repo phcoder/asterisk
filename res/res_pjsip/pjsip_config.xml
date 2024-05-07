@@ -1663,6 +1663,21 @@
 				<configOption name="username">
 					<synopsis>Username to use for account</synopsis>
 				</configOption>
+				<configOption name="usim_ami">
+					<synopsis>VoLTE: Switch to perform USIM authentication via AMI interface</synopsis>
+				</configOption>
+				<configOption name="usim_opc">
+					<synopsis>VoLTE: OPC</synopsis>
+				</configOption>
+				<configOption name="usim_k">
+					<synopsis>VoLTE: K</synopsis>
+				</configOption>
+				<configOption name="usim_sqn">
+					<synopsis>VoLTE: SQN</synopsis>
+				</configOption>
+				<configOption name="usim_xor">
+					<synopsis>VoLTE: Use XOR authentication algorithm</synopsis>
+				</configOption>
 			</configObject>
 			<configObject name="domain_alias">
 				<synopsis>Domain Alias</synopsis>
@@ -1870,6 +1885,33 @@
 							parameter stripped from the outgoing packet.
 						</para>
 					</description>
+				</configOption>
+				<configOption name="sec_port_c_min">
+					<synopsis>Specify minimum port for VoLTE client transport.</synopsis>
+					<description><para>
+						Defines port rage for VoLTE transport.
+					</para></description>
+				</configOption>
+				<configOption name="sec_port_c_max">
+					<synopsis>Specify maximum port for VoLTE client transport.</synopsis>
+					<description><para>
+						Defines port rage for VoLTE transport.
+					</para></description>
+				</configOption>
+				<configOption name="sec_port_s_min">
+					<synopsis>Specify minimum port for VoLTE server transport.</synopsis>
+					<description><para>
+						Defines port rage for VoLTE transport.
+					</para></description>
+				</configOption>
+				<configOption name="sec_port_s_max">
+					<synopsis>Specify maximum port for VoLTE server transport.</synopsis>
+					<description><para>
+						Defines port rage for VoLTE transport.
+					</para></description>
+				</configOption>
+				<configOption name="p_access_network_info">
+					<synopsis>VoLTE: Set content of P-Access-Network-Info header.</synopsis>
 				</configOption>
 			</configObject>
 			<configObject name="contact">
