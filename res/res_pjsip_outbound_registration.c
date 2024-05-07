@@ -2299,9 +2299,7 @@ static char *cli_register(struct ast_cli_entry *e, int cmd, struct ast_cli_args 
 	/* We need to serialize the unregister and register so they need
 	 * to be queued as separate tasks.
 	 */
-	if (queue_unregister(state)) {
-		ast_cli(a->fd, "Failed to queue unregistration\n");
-	} else if (queue_register(state)) {
+	if (queue_register(state)) {
 		ast_cli(a->fd, "Failed to queue registration\n");
 	}
 
@@ -2366,10 +2364,8 @@ static int ami_register(struct mansession *s, const struct message *m)
 	/* We need to serialize the unregister and register so they need
 	 * to be queued as separate tasks.
 	 */
-	if (queue_unregister(state)) {
-		astman_send_ack(s, m, "Failed to queue unregistration");
-	} else if (queue_register(state)) {
-		astman_send_ack(s, m, "Failed to queue unregistration");
+	if (queue_register(state)) {
+		astman_send_ack(s, m, "Failed to queue registration");
 	} else {
 		astman_send_ack(s, m, "Reregistration sent");
 	}
