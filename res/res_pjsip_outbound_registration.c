@@ -209,6 +209,9 @@
 				<configOption name="support_outbound">
 					<synopsis>Enables advertising SIP Outbound support (RFC5626) for outbound REGISTER requests.</synopsis>
 				</configOption>
+				<configOption name="manual_register">
+					<synopsis>Perform registration only upon request over AMI interface.</synopsis>
+				</configOption>
 			</configObject>
 		</configFile>
 	</configInfo>
@@ -368,6 +371,8 @@ struct sip_outbound_registration {
 	unsigned int support_path;
 	/*! \brief Whether Outbound support is enabled */
 	unsigned int support_outbound;
+	/*! \brief Do not trigger registration automatically. */
+	unsigned int manual_register;
 };
 
 /*! \brief Outbound registration client state information (persists for lifetime of regc) */
@@ -2019,7 +2024,8 @@ static int sip_outbound_registration_apply(const struct ast_sorcery *sorcery, vo
 		return -1;
 	}
 
-	if (ast_sip_push_task(new_state->client_state->serializer,
+	if (!applied->manual_register &&
+	    ast_sip_push_task(new_state->client_state->serializer,
 			      sip_outbound_registration_perform, ao2_bump(new_state))) {
 		ast_log(LOG_ERROR, "Failed to perform outbound registration on '%s'\n",
 			ast_sorcery_object_get_id(new_state->registration));
@@ -2805,6 +2811,7 @@ static int load_module(void)
 	ast_sorcery_object_field_register_custom(ast_sip_get_sorcery(), "registration", "security_mechanisms", "", security_mechanisms_handler, security_mechanism_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "line", "no", OPT_BOOL_T, 1, FLDSET(struct sip_outbound_registration, line));
 	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "endpoint", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct sip_outbound_registration, endpoint));
+	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "manual_register", "no", OPT_BOOL_T, 1, FLDSET(struct sip_outbound_registration, manual_register));
 
 	/*
 	 * Register sorcery observers.
