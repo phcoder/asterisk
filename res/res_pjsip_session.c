@@ -53,6 +53,7 @@
 #include "asterisk/vector.h"
 
 #include "res_pjsip_session/pjsip_session.h"
+#include "res_pjsip_session/volte.h"
 
 #define SDP_HANDLER_BUCKETS 11
 
@@ -1627,7 +1628,8 @@ static int delay_request(struct ast_sip_session *session,
 	SCOPE_EXIT_RTN_VALUE(0);
 }
 
-static pjmedia_sdp_session *generate_session_refresh_sdp(struct ast_sip_session *session)
+static pjmedia_sdp_session *generate_session_refresh_sdp(struct ast_sip_session *session,
+							 enum ast_sip_session_refresh_method method)
 {
 	pjsip_inv_session *inv_session = session->inv_session;
 	const pjmedia_sdp_session *previous_sdp = NULL;
@@ -1643,7 +1645,7 @@ static pjmedia_sdp_session *generate_session_refresh_sdp(struct ast_sip_session 
 	SCOPE_EXIT_RTN_VALUE(create_local_sdp(inv_session, session, previous_sdp, 0));
 }
 
-static void set_from_header(struct ast_sip_session *session)
+static pj_status_t set_from_header(struct ast_sip_session *session, const char *from_uri)
 {
 	struct ast_party_id effective_id;
 	struct ast_party_id connected_id;
@@ -1657,7 +1659,7 @@ static void set_from_header(struct ast_sip_session *session)
 	const char *pjsip_from_domain;
 
 	if (!session->channel || session->saved_from_hdr) {
-		return;
+		return PJ_SUCCESS;
 	}
 
 	/* We need to save off connected_id for RPID/PAI generation */
@@ -1688,14 +1690,29 @@ static void set_from_header(struct ast_sip_session *session)
 
 	ast_party_id_free(&connected_id);
 
-	if (!ast_strlen_zero(session->endpoint->fromuser)) {
-		dlg_info_name_addr->display.ptr = NULL;
-		dlg_info_name_addr->display.slen = 0;
-		pj_strdup2(dlg_pool, &dlg_info_uri->user, session->endpoint->fromuser);
-	}
+	if (session->endpoint->volte) {
+		/* VoLTE uses the first P-Associated-URI field for 'From:'. */
+		if (!strncmp(from_uri, "tel:", 4)) {
+			pjsip_sip_uri_set_tel(dlg_info_uri);
+		} else if (!!strncmp(from_uri, "sip:", 4)) {
+			ast_log(LOG_ERROR, "P-Associated-URI is not sip/tel, cannot continue to call.\n");
+			return PJ_FALSE;
+		}
+		dlg_info_uri->user.ptr = NULL;
+		dlg_info_uri->user.slen = 0;
+		pj_strdup2(dlg_pool, &dlg_info_uri->host, from_uri + 4);
+		/* IMS does not restrict the From header. */
+		restricted = 0;
+	} else {
+		if (!ast_strlen_zero(session->endpoint->fromuser)) {
+			dlg_info_name_addr->display.ptr = NULL;
+			dlg_info_name_addr->display.slen = 0;
+			pj_strdup2(dlg_pool, &dlg_info_uri->user, session->endpoint->fromuser);
+		}
 
-	if (!ast_strlen_zero(session->endpoint->fromdomain)) {
-		pj_strdup2(dlg_pool, &dlg_info_uri->host, session->endpoint->fromdomain);
+		if (!ast_strlen_zero(session->endpoint->fromdomain)) {
+			pj_strdup2(dlg_pool, &dlg_info_uri->host, session->endpoint->fromdomain);
+		}
 	}
 
 	/*
@@ -1734,7 +1751,9 @@ static void set_from_header(struct ast_sip_session *session)
 		}
 	} else {
 		ast_sip_add_usereqphone(session->endpoint, dlg_pool, dlg_info->uri);
-    }
+	}
+
+	return PJ_SUCCESS;
 }
 
 /*
@@ -2483,7 +2502,7 @@ static int sip_session_refresh(struct ast_sip_session *session,
 			session->pending_media_state = pending_media_state;
 		}
 
-		new_sdp = generate_session_refresh_sdp(session);
+		new_sdp = generate_session_refresh_sdp(session, method);
 		if (!new_sdp) {
 			ast_sip_session_media_state_reset(session->pending_media_state);
 			ast_sip_session_media_state_free(active_media_state);
@@ -2598,6 +2617,7 @@ void ast_sip_session_send_response(struct ast_sip_session *session, pjsip_tx_dat
 
 static pj_bool_t session_on_rx_request(pjsip_rx_data *rdata);
 static pj_bool_t session_on_rx_response(pjsip_rx_data *rdata);
+static pj_status_t session_on_tx_request(pjsip_tx_data *tdata);
 static pj_status_t session_on_tx_response(pjsip_tx_data *tdata);
 static void session_on_tsx_state(pjsip_transaction *tsx, pjsip_event *e);
 
@@ -2607,6 +2627,7 @@ static pjsip_module session_module = {
 	.on_rx_request = session_on_rx_request,
 	.on_rx_response = session_on_rx_response,
 	.on_tsx_state = session_on_tsx_state,
+	.on_tx_request = session_on_tx_request,
 	.on_tx_response = session_on_tx_response,
 };
 
@@ -2862,9 +2883,43 @@ void ast_sip_session_send_request(struct ast_sip_session *session, pjsip_tx_data
 	ast_sip_session_send_request_with_cb(session, tdata, NULL);
 }
 
+static pj_status_t get_transport_transport_state(struct ast_sip_endpoint *endpoint,
+						 struct ast_sip_transport **transp,
+						 struct ast_sip_transport_state **transport_state)
+{
+	if (transp)
+		*transp = NULL;
+	if (transport_state)
+		*transport_state = NULL;
+
+	if (transp && (!endpoint->transport ||
+	    (!(*transp = ast_sorcery_retrieve_by_id(ast_sip_get_sorcery(), "transport", endpoint->transport))))) {
+		ast_log(LOG_ERROR, "No transport config '%s'\n", endpoint->transport);
+		goto error;
+	}
+	if (transport_state && (!endpoint->transport ||
+	    (!(*transport_state = ast_sip_get_transport_state(endpoint->transport))))) {
+		ast_log(LOG_ERROR, "No transport_state found for endpoint '%s'. Cannot register.\n",
+			endpoint->transport);
+		goto error;
+	}
+
+	return 0;
+
+error:
+	if (transp)
+		ao2_cleanup(*transp);
+	if (transport_state)
+		ao2_cleanup(*transport_state);
+	return -1;
+}
+
 int ast_sip_session_create_invite(struct ast_sip_session *session, pjsip_tx_data **tdata)
 {
 	pjmedia_sdp_session *offer;
+	struct ast_sip_transport_state *transport_state = NULL;
+	int volte = session->endpoint->volte;
+
 	SCOPE_ENTER(1, "%s\n", ast_sip_session_get_name(session));
 
 	if (!(offer = create_local_sdp(session->inv_session, session, NULL, 0))) {
@@ -2880,15 +2935,34 @@ int ast_sip_session_create_invite(struct ast_sip_session *session, pjsip_tx_data
 	}
 #endif
 
+	if (volte) {
+		if (get_transport_transport_state(session->endpoint, NULL, &transport_state)) {
+			SCOPE_EXIT_RTN_VALUE(-1, "Failed to get transport state\n");
+		}
+		ao2_lock(transport_state);
+	}
+
 	/*
 	 * We MUST call set_from_header() before pjsip_inv_invite.  If we don't, the
 	 * From in the initial INVITE will be wrong but the rest of the messages will be OK.
 	 */
-	set_from_header(session);
+	if (set_from_header(session, (volte) ? transport_state->volte.p_associated_uri : NULL)) {
+		if (transport_state)
+			ao2_unlock(transport_state);
+		ao2_cleanup(transport_state);
+		SCOPE_EXIT_RTN_VALUE(-1, "set_from_header failed\n");
+	}
 
 	if (pjsip_inv_invite(session->inv_session, tdata) != PJ_SUCCESS) {
+		if (transport_state)
+			ao2_unlock(transport_state);
+		ao2_cleanup(transport_state);
 		SCOPE_EXIT_RTN_VALUE(-1, "pjsip_inv_invite failed\n");
 	}
+
+	if (transport_state)
+		ao2_unlock(transport_state);
+	ao2_cleanup(transport_state);
 
 	SCOPE_EXIT_RTN_VALUE(0);
 }
@@ -3055,6 +3129,13 @@ struct ast_sip_session *ast_sip_session_alloc(struct ast_sip_endpoint *endpoint,
 		}
 
 		ast_dsp_set_features(session->dsp, dsp_features);
+	}
+	if (endpoint->volte) {
+		int i;
+		/* Initialize local QOS state table for each possible media. */
+		for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
+			volte_init_sdp_qos(&session->qos_status[i]);
+		}
 	}
 
 	session->endpoint = ao2_bump(endpoint);
@@ -4120,6 +4201,28 @@ static int new_invite(struct new_invite *invite)
 	}
 #endif
 
+	if (invite->session->endpoint->volte &&
+	    invite->session->precondition_state != AST_SIP_SESSION_PRECONDITION_MT_COMPLETE) {
+		pjsip_tx_data *packet = NULL;
+
+		if (!volte_is_supported_precondition(invite->rdata)) {
+			ast_debug(1, "%s: Precondition is not supported for MT call.\n",
+				  ast_sip_session_get_name(invite->session));
+			invite->session->precondition_state = AST_SIP_SESSION_PRECONDITION_MT_COMPLETE;
+		} else {
+			int i;
+
+			if (pjsip_inv_answer(invite->session->inv_session, 183, NULL, NULL, &packet) == PJ_SUCCESS)
+		                ast_sip_session_send_response(invite->session, packet);
+			ast_debug(1, "%s: Precondition state is waiting for UPDATE to complete.\n",
+				  ast_sip_session_get_name(invite->session));
+			for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
+				volte_update_sdp_qos(&invite->session->qos_status[i]);
+			}
+			invite->session->precondition_state = AST_SIP_SESSION_PRECONDITION_MT_WAIT_UPDATE;
+		}
+	}
+
 	handle_incoming_request(invite->session, invite->rdata);
 
 end:
@@ -4324,6 +4427,100 @@ static pj_bool_t session_on_rx_request(pjsip_rx_data *rdata)
 		handled == PJ_TRUE ? "yes" : "no");
 }
 
+
+static const char *volte_invite_contact_params[] = {
+	"+g.3gpp.icsi-ref",
+	"\"urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel\"",
+	"audio",
+	"",
+	"+g.3gpp.mid-call",
+	"",
+	"+g.3gpp.srvcc-alerting",
+	"",
+	"+g.3gpp.ps2cs-srvcc-orig-pre-alerting",
+	"",
+	NULL
+};
+
+static const char *volte_other_contact_params[] = {
+	"+g.3gpp.icsi-ref",
+	"\"urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel\"",
+	"audio",
+	"",
+	NULL
+};
+
+static pj_status_t session_on_tx_request(pjsip_tx_data *tdata)
+{
+	pjsip_dialog *dlg = pjsip_tdata_get_dlg(tdata);
+	RAII_VAR(struct ast_sip_session *, session, dlg ? ast_sip_dialog_get_session(dlg) : NULL, ao2_cleanup);
+
+	if ((!!pj_strcmp2(&tdata->msg->line.req.method.name, "INVITE") &&
+		!!pj_strcmp2(&tdata->msg->line.req.method.name, "PRACK") &&
+		!!pj_strcmp2(&tdata->msg->line.req.method.name, "UPDATE") &&
+		!!pj_strcmp2(&tdata->msg->line.req.method.name, "CANCEL") &&
+		!!pj_strcmp2(&tdata->msg->line.req.method.name, "BYE") &&
+		!!pj_strcmp2(&tdata->msg->line.req.method.name, "NOTIFY") &&
+		!!pj_strcmp2(&tdata->msg->line.req.method.name, "INFO") &&
+		!!pj_strcmp2(&tdata->msg->line.req.method.name, "REFER") &&
+		!!pj_strcmp2(&tdata->msg->line.req.method.name, "MESSAGE") &&
+		!!pj_strcmp2(&tdata->msg->line.req.method.name, "OPTIONS")) ||
+		!(session) ||
+		!session->channel) {
+		return PJ_SUCCESS;
+	}
+
+	if (session->endpoint->volte) {
+		struct ast_sip_transport_state *transport_state;
+
+		if (get_transport_transport_state(session->endpoint, NULL, &transport_state)) {
+			ast_log(LOG_ERROR, "Failed to get transport state\n");
+			return PJ_SUCCESS;
+		}
+		ao2_lock(transport_state);
+
+		if (transport_state->volte.p_access_network_info[0] &&
+		    volte_add_p_access_network_info(tdata, transport_state->volte.p_access_network_info)) {
+			ast_log(LOG_ERROR, "Failed to add P-Access-Network-info header.\n");
+		}
+
+		if (volte_add_sec_agree(tdata)) {
+			ast_log(LOG_ERROR, "Failed to add sec-agree headers.\n");
+		}
+
+		if (volte_add_security_verify(transport_state, tdata)) {
+			ast_log(LOG_ERROR, "Failed to add Security-Verify header.\n");
+		}
+
+		if (!pj_strcmp2(&tdata->msg->line.req.method.name, "INVITE")) {
+			pj_bool_t first_invite = (session->inv_session->state == PJSIP_INV_STATE_NULL) ||
+						 (session->inv_session->state == PJSIP_INV_STATE_CALLING);
+
+			/* 3GPP TS 24.229 5.1.3.1: Add "Accept: application/sdp,application/3gpp-ims+xml" */
+			if (first_invite)
+				volte_add_accept(tdata);
+
+			/* Accept-Contact */
+			volte_add_accept_contact(tdata, "*;+g.3gpp.icsi-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel\";audio");
+
+			/* P-Preferred-Service: GSMA FCM.01 3.2.3.3 */
+			volte_add_p_preferred_service(tdata, "urn:urn-7:3gpp-service.ims.icsi.mmtel");
+
+			/* Add parameters to Contact header. */
+			volte_add_contact_params(tdata, (first_invite) ? volte_invite_contact_params :
+									 volte_other_contact_params);
+		}
+		if (!pj_strcmp2(&tdata->msg->line.req.method.name, "UPDATE")) {
+			/* Add parameters to Contact header. */
+			volte_add_contact_params(tdata, volte_other_contact_params);
+		}
+
+		ao2_unlock(transport_state);
+		ao2_cleanup(transport_state);
+	}
+
+	return PJ_SUCCESS;
+}
 
 static pj_bool_t session_on_tx_response(pjsip_tx_data *tdata)
 {
@@ -4545,6 +4742,54 @@ static void handle_incoming_response(struct ast_sip_session *session, pjsip_rx_d
 	SCOPE_ENTER(3, "%s: Response is %d %.*s\n", ast_sip_session_get_name(session),
 		status.code, (int) pj_strlen(&status.reason), pj_strbuf(&status.reason));
 
+	/* Handle "Session Progress" during precondition. */
+	if (session->endpoint && session->endpoint->volte && status.code == 183 &&
+	    session->precondition_state == AST_SIP_SESSION_PRECONDITION_MO_WAIT_PROGRESS) {
+		sdp_info = pjsip_rdata_get_sdp_info(rdata);
+		if (sdp_info && sdp_info->sdp) {
+			for (i = 0; i < sdp_info->sdp->media_count; i++) {
+				if (!volte_parse_sdp_qos(sdp_info->sdp->media[i], &remote_status)) {
+					volte_negotiate_sdp_qos(&session->qos_status[i], &remote_status,
+								"183 Session Progress received");
+				}
+			}
+		}
+		if (session->dedicated_bearer_up || session->endpoint->dedicated_bearer_up) {
+			enum ast_sip_session_refresh_method method = AST_SIP_SESSION_REFRESH_METHOD_UPDATE;
+			int generate_new_sdp = PJ_TRUE;
+
+			ast_debug(1, "%s: Precondition state is waiting for UPDATE to complete.\n",
+				  ast_sip_session_get_name(session));
+			session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_UPDATE;
+			for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
+				volte_update_sdp_qos(&session->qos_status[i]);
+			}
+			ast_sip_session_refresh(session, NULL, NULL, NULL, method, generate_new_sdp, NULL);
+		} else {
+			ast_debug(1, "%s: Precondition state is waiting for dedicaed bearer.\n",
+				  ast_sip_session_get_name(session));
+			session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_WAIT_BEARER;
+		}
+	}
+
+	/* Handle "200 OK" (UPDATE) during precondition. */
+	if (session->endpoint && session->endpoint->volte && status.code == 200 && !pj_strcmp2(&rdata->msg_info.cseq->method.name, "UPDATE")) {
+		sdp_info = pjsip_rdata_get_sdp_info(rdata);
+		if (sdp_info && sdp_info->sdp) {
+			for (i = 0; i < sdp_info->sdp->media_count; i++) {
+				if (!volte_parse_sdp_qos(sdp_info->sdp->media[i], &remote_status)) {
+					volte_negotiate_sdp_qos(&session->qos_status[i], &remote_status,
+								"UPDATE response received");
+				}
+			}
+		}
+		if (session->precondition_state == AST_SIP_SESSION_PRECONDITION_MO_UPDATE) {
+			ast_debug(1, "%s: Precondition state is complete.\n",
+				  ast_sip_session_get_name(session));
+			session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_COMPLETE;
+		}
+	}
+
 	AST_LIST_TRAVERSE(&session->supplements, supplement, next) {
 		if (!(supplement->response_priority & response_priority)) {
 			continue;
@@ -4608,6 +4853,30 @@ static void handle_outgoing_response(struct ast_sip_session *session, pjsip_tx_d
 		if (supplement->outgoing_response && does_method_match(&cseq->method.name, supplement->method)) {
 			supplement->outgoing_response(session, tdata);
 		}
+	}
+
+	if (session->endpoint && session->endpoint->volte && status.code != 100) {
+		struct ast_sip_transport_state *transport_state;
+
+		if (get_transport_transport_state(session->endpoint, NULL, &transport_state)) {
+			ast_log(LOG_ERROR, "Failed to get transport state\n");
+			return;
+		}
+		ao2_lock(transport_state);
+
+		if (transport_state->volte.p_access_network_info[0] &&
+		    volte_add_p_access_network_info(tdata, transport_state->volte.p_access_network_info)) {
+			ast_log(LOG_ERROR, "Failed to add P-Access-Network-info header.\n");
+		}
+
+		/* Add parameters to Contact header. */
+		if (!pj_strcmp2(&cseq->method.name, "INVITE")
+		 || !pj_strcmp2(&cseq->method.name, "UPDATE")) {
+			volte_add_contact_params(tdata, volte_other_contact_params);
+		}
+
+		ao2_unlock(transport_state);
+		ao2_cleanup(transport_state);
 	}
 
 	SCOPE_EXIT("%s\n", ast_sip_session_get_name(session));
@@ -5247,6 +5516,20 @@ static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, stru
 			local = NULL;
 			SCOPE_EXIT_LOG_EXPR(goto end, LOG_ERROR, "%s: Couldn't add sdp streams for stream %s\n",
 				ast_sip_session_get_name(session), ast_str_tmp(128, ast_stream_to_str(stream, &STR_TMP)));
+		}
+
+		/* Add QOS attributes to each media. */
+		if (session->endpoint->volte &&
+		    session->precondition_state != AST_SIP_SESSION_PRECONDITION_MO_COMPLETE &&
+		    session->precondition_state != AST_SIP_SESSION_PRECONDITION_MT_COMPLETE) {
+			/* On offer, do negotiation and then add QOS attributes. */
+			if (offer && qos_offer) {
+				struct ast_sip_session_qos_status remote_status;
+				if (!volte_parse_sdp_qos(offer->media[streams], &remote_status))
+					volte_negotiate_sdp_qos(&session->qos_status[streams], &remote_status,
+								"Offer received");
+			}
+			volte_add_sdp_qos(inv->pool_prov, local->media[streams], &session->qos_status[streams]);
 		}
 
 		/* If a stream was actually added then add any additional details */

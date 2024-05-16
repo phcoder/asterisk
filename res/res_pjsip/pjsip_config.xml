@@ -1519,6 +1519,12 @@
 				<configOption name="send_aoc" default="no">
 					<synopsis>Send Advice-of-Charge messages</synopsis>
 				</configOption>
+				<configOption name="volte">
+					<synopsis>VoLTE: Perform Voice over LTE SIP registration process.</synopsis>
+				</configOption>
+				<configOption name="dedicated_bearer_up">
+					<synopsis>VoLTE: Do not wait for dedicated bearer status via AMI interface.</synopsis>
+				</configOption>
 			</configObject>
 			<configObject name="auth">
 				<synopsis>Authentication type</synopsis>
@@ -2502,6 +2508,17 @@
 						offer in the 200 OK response containing all configured codecs on the
 						endpoint, instead of simply those that have already been negotiated.
 						RFC 3261 specifies this as a SHOULD requirement.
+					</para></description>
+				</configOption>
+				<configOption name="volte">
+					<synopsis>Perform Voice over LTE SIP registration process.</synopsis>
+				</configOption>
+				<configOption name="precondition_up" default="no">
+					<synopsis>Assume that precondition is up</synopsis>
+					<description><para>
+						This helps to speed up development process. No precondition state change
+						via AMI interface is required. By default, preconditon state change is
+						required via AMI interface.
 					</para></description>
 				</configOption>
 			</configObject>

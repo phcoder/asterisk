@@ -217,8 +217,8 @@
 				<configOption name="volte">
 					<synopsis>Perform Voice over LTE SIP registration process.</synopsis>
 				</configOption>
-				<configOption name="imsi">
-					<synopsis>Set IMSI in contact header for VoLTE calls.</synopsis>
+				<configOption name="imei">
+					<synopsis>Set IMEI in contact header for VoLTE calls.</synopsis>
 				</configOption>
 			</configObject>
 		</configFile>
@@ -1978,6 +1978,8 @@ volte_failed:
 		}
 
 		save_response_fields_to_transport(response);
+		if (response->client_state->volte)
+			store_volte_p_associated_uri(response);
 	} else if (response->client_state->destroy) {
 		/* We need to deal with the pending destruction instead. */
 	} else if (response->retry_after) {

@@ -1112,6 +1112,10 @@ struct ast_sip_endpoint {
 	enum ast_sip_100rel_mode rel100;
 	/*! Send Advice-of-Charge messages */
 	unsigned int send_aoc;
+	/*! \brief VoLTE support */
+	unsigned int volte;
+	/*! Flag to declare dedicated as up, even if not set via AMI interface */
+	unsigned int dedicated_bearer_up;
 };
 
 /*! URI parameter for symmetric transport */
