@@ -2513,10 +2513,10 @@
 				<configOption name="volte">
 					<synopsis>Perform Voice over LTE SIP registration process.</synopsis>
 				</configOption>
-				<configOption name="precondition_up" default="no">
-					<synopsis>Assume that precondition is up</synopsis>
+				<configOption name="dedicated_bearer_up" default="no">
+					<synopsis>Assume that dedicated bearer is up</synopsis>
 					<description><para>
-						This helps to speed up development process. No precondition state change
+						This helps to speed up development process. No dedicated bearer state change
 						via AMI interface is required. By default, preconditon state change is
 						required via AMI interface.
 					</para></description>

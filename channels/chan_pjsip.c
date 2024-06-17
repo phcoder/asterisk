@@ -1693,7 +1693,8 @@ static int chan_pjsip_indicate(struct ast_channel *ast, int condition, const voi
 		}
 		break;
 	case AST_CONTROL_PROGRESS:
-		if (ast_channel_state(ast) != AST_STATE_UP) {
+		/* Do not send 'Session Progress' when using VoLTE. It is done automatically. */
+		if (ast_channel_state(ast) != AST_STATE_UP && !channel->session->endpoint->volte) {
 			response_code = 183;
 		} else {
 			res = -1;

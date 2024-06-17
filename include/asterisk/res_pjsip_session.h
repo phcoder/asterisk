@@ -170,6 +170,40 @@ enum ast_sip_session_call_direction {
 	AST_SIP_SESSION_OUTGOING_CALL,
 };
 
+/*! \brief Indicates the precondition state in case of VoLTE calls */
+enum ast_sip_session_precondition {
+	AST_SIP_SESSION_PRECONDITION_NULL = 0,
+	AST_SIP_SESSION_PRECONDITION_MO_WAIT_PROGRESS,
+	AST_SIP_SESSION_PRECONDITION_MO_WAIT_BEARER,
+	AST_SIP_SESSION_PRECONDITION_MO_UPDATE,
+	AST_SIP_SESSION_PRECONDITION_MO_COMPLETE,
+	AST_SIP_SESSION_PRECONDITION_MT_WAIT_BEARER,
+	AST_SIP_SESSION_PRECONDITION_MT_WAIT_UPDATE,
+	AST_SIP_SESSION_PRECONDITION_MT_COMPLETE,
+};
+
+/*! \brief Indicates the precondition state in case of VoLTE calls */
+enum ast_sip_session_qos_status_strength {
+	AST_SIP_SESSION_QOS_STATUS_STRENGTH_NONE,
+	AST_SIP_SESSION_QOS_STATUS_STRENGTH_OPTIONAL,
+	AST_SIP_SESSION_QOS_STATUS_STRENGTH_MANDATORY,
+};
+
+/*! \brief Current QOS state table in case of VoLTE calls */
+struct ast_sip_session_qos_status {
+	/*! \brief Local QOS state */
+	pj_bool_t local_send_curr, local_recv_curr;
+	/*! \brief Remote QOS state */
+	pj_bool_t remote_send_curr, remote_recv_curr;
+	/*! \brief Local QOS desired */
+	enum ast_sip_session_qos_status_strength local_send_des, local_recv_des;
+	/*! \brief Remote QOS desired */
+	enum ast_sip_session_qos_status_strength remote_send_des, remote_recv_des;
+	/*! \brief Request confirmation on QOS state change */
+	pj_bool_t remote_conf_set;
+	pj_bool_t remote_send_conf, remote_recv_conf;
+};
+
 /*!
  * \brief A structure describing a SIP session
  *
@@ -245,6 +279,12 @@ struct ast_sip_session {
 	enum ast_sip_session_call_direction call_direction;
 	/*! Originating Line Info (ANI II digits) */
 	int ani2;
+	/*! Current precondition state for this session */
+	enum ast_sip_session_precondition precondition_state;
+	/*! Flag that state if the dedicated bearer for this call is up or down */
+	unsigned int dedicated_bearer_up;
+	/*! Current precondition QOS state table for this session */
+	struct ast_sip_session_qos_status qos_status[PJMEDIA_MAX_SDP_MEDIA];
 };
 
 typedef int (*ast_sip_session_request_creation_cb)(struct ast_sip_session *session, pjsip_tx_data *tdata);
