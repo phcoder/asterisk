@@ -1892,6 +1892,14 @@
 						</para>
 					</description>
 				</configOption>
+				<configOption name="bind_interface">
+					<synopsis>Specify interface to use for TCP transport.</synopsis>
+					<description><para>
+						Only works with TCP transport. This ensures that the specified interface
+						is used when doing an outgoing connection. Incoming connections are not
+						affected.
+					</para></description>
+				</configOption>
 				<configOption name="sec_port_c_min">
 					<synopsis>Specify minimum port for VoLTE client transport.</synopsis>
 					<description><para>

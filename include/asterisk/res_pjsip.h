@@ -270,6 +270,8 @@ struct ast_sip_transport {
 		AST_STRING_FIELD(external_media_address);
 		/*! Optional domain to use for messages if provided could not be found */
 		AST_STRING_FIELD(domain);
+		/*! Optional interface to use for outgoing connections */
+		AST_STRING_FIELD(bind_if);
 		);
 	/*! Type of transport */
 	enum ast_transport type;

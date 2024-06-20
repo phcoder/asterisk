@@ -831,6 +831,7 @@ static int transport_apply(const struct ast_sorcery *sorcery, void *obj)
 
 		pjsip_tcp_transport_cfg_default(&cfg, temp_state->state->host.addr.sa_family);
 		cfg.bind_addr = temp_state->state->host;
+		cfg.bind_if = transport->bind_if;
 		cfg.async_cnt = transport->async_operations;
 		set_qos(transport, &cfg.qos_params);
 		/* sockopt_params.options is copied to each newly connected socket */
@@ -1766,6 +1767,7 @@ int ast_sip_initialize_sorcery_transport(void)
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "type", "", transport_state_init, NULL, NULL, 0, 0);
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "protocol", "udp", transport_protocol_handler, transport_protocol_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "bind", "", transport_bind_handler, transport_bind_to_str, NULL, 0, 0);
+	ast_sorcery_object_field_register(sorcery, "transport", "bind_interface", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_transport, bind_if));
 	ast_sorcery_object_field_register(sorcery, "transport", "async_operations", "1", OPT_UINT_T, 0, FLDSET(struct ast_sip_transport, async_operations));
 
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "ca_list_file", "", transport_tls_file_handler, ca_list_file_to_str, NULL, 0, 0);
