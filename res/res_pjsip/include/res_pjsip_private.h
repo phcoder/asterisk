@@ -95,6 +95,15 @@ int ast_sip_initialize_sorcery_domain_alias(void);
 
 /*!
  * \internal
+ * \brief Initialize resolve support on a sorcery instance
+ *
+ * \retval -1 failure
+ * \retval 0 success
+ */
+int ast_sip_initialize_sorcery_resolve(void);
+
+/*!
+ * \internal
  * \brief Initialize authentication support on a sorcery instance
  *
  * \retval -1 failure

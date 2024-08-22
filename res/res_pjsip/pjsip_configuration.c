@@ -2324,6 +2324,13 @@ int ast_res_pjsip_initialize_configuration(void)
 		return -1;
 	}
 
+	if (ast_sip_initialize_sorcery_resolve()) {
+		ast_log(LOG_ERROR, "Failed to register SIP resolve support with sorcery\n");
+		ast_sorcery_unref(sip_sorcery);
+		sip_sorcery = NULL;
+		return -1;
+	}
+
 	if (ast_sip_initialize_sorcery_global()) {
 		ast_log(LOG_ERROR, "Failed to register SIP Global support\n");
 		ast_sorcery_unref(sip_sorcery);

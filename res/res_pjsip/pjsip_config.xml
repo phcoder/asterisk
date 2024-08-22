@@ -1701,6 +1701,19 @@
 					<synopsis>Domain to be aliased</synopsis>
 				</configOption>
 			</configObject>
+			<configObject name="resolve">
+				<synopsis>IP Resolving Locally</synopsis>
+				<description><para>
+					Specifies a static IP address that should be used instead of the
+					domain name that matches the object name.
+				</para></description>
+				<configOption name="type">
+					<synopsis>Must be of type 'domain_alias'.</synopsis>
+				</configOption>
+				<configOption name="ip">
+					<synopsis>Target IP address.</synopsis>
+				</configOption>
+			</configObject>
 			<configObject name="transport">
 				<synopsis>SIP Transport</synopsis>
 				<description><para>

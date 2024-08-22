@@ -352,6 +352,20 @@ struct ast_sip_domain_alias {
 	);
 };
 
+#define SIP_SORCERY_RESOLVE_TYPE "resolve"
+
+/*!
+ * Details about a SIP resolve
+ */
+struct ast_sip_resolve {
+	/*! Sorcery object details */
+	SORCERY_OBJECT(details);
+	AST_DECLARE_STRING_FIELDS(
+		/*! IP */
+		AST_STRING_FIELD(ip);
+	);
+};
+
 /*!
  * \brief Structure for SIP nat hook information
  */

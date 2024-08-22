@@ -466,16 +466,37 @@ static void sip_resolve(pjsip_resolver_t *resolver, pj_pool_t *pool, const pjsip
 {
 	int ip_addr_ver;
 	pjsip_transport_type_e type = target->type;
+	struct ast_sip_resolve *sorcery_resolve;
 	struct sip_resolve *resolve;
 	char host[NI_MAXHOST];
+	pj_str_t host_str;
 	int res = 0;
 
 	ast_copy_pj_str(host, &target->addr.host, sizeof(host));
 
-	ast_debug(2, "Performing SIP DNS resolution of target '%s'\n", host);
+	sorcery_resolve = ast_sorcery_retrieve_by_id(ast_sip_get_sorcery(), SIP_SORCERY_RESOLVE_TYPE, host);
+	if (sorcery_resolve) {
+		pj_cstr(&host_str, sorcery_resolve->ip);
 
-	/* If the provided target is already an address don't bother resolving */
-	ip_addr_ver = sip_resolve_get_ip_addr_ver(&target->addr.host);
+		ip_addr_ver = sip_resolve_get_ip_addr_ver(&host_str);
+		if (!ip_addr_ver) {
+			ast_log(LOG_ERROR, "Given resolve IP '%s' is an invalid IP address.\n", sorcery_resolve->ip);
+			cb(PJ_EINVAL, token, NULL);
+			return;
+		}
+
+		ast_debug(2, "Performing local resolution of target '%s' to '%s'\n", host, sorcery_resolve->ip);
+
+		ast_copy_string(host, sorcery_resolve->ip, sizeof(host));
+	} else {
+		host_str.slen = target->addr.host.slen;
+		host_str.ptr = target->addr.host.ptr;
+
+		ast_debug(2, "Performing SIP DNS resolution of target '%s'\n", host);
+
+		/* If the provided target is already an address don't bother resolving */
+		ip_addr_ver = sip_resolve_get_ip_addr_ver(&target->addr.host);
+	}
 
 	/* Determine the transport to use if none has been explicitly specified */
 	if (type == PJSIP_TRANSPORT_UNSPECIFIED) {
@@ -511,11 +532,11 @@ static void sip_resolve(pjsip_resolver_t *resolver, pj_pool_t *pool, const pjsip
 		if (ip_addr_ver == 4) {
 			addresses.entry[0].addr_len = sizeof(pj_sockaddr_in);
 			pj_sockaddr_init(pj_AF_INET(), &addresses.entry[0].addr, NULL, 0);
-			pj_inet_aton(&target->addr.host, &addresses.entry[0].addr.ipv4.sin_addr);
+			pj_inet_aton(&host_str, &addresses.entry[0].addr.ipv4.sin_addr);
 		} else {
 			addresses.entry[0].addr_len = sizeof(pj_sockaddr_in6);
 			pj_sockaddr_init(pj_AF_INET6(), &addresses.entry[0].addr, NULL, 0);
-			pj_inet_pton(pj_AF_INET6(), &target->addr.host, &addresses.entry[0].addr.ipv6.sin6_addr);
+			pj_inet_pton(pj_AF_INET6(), &host_str, &addresses.entry[0].addr.ipv6.sin6_addr);
 		}
 
 		pj_sockaddr_set_port(&addresses.entry[0].addr, !target->addr.port ? pjsip_transport_get_default_port_for_type(type) : target->addr.port);
