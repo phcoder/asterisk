@@ -582,6 +582,7 @@ AST_EXT_LIB_SETUP([OSPTK], [OSP Toolkit], [osptk])
 AST_EXT_LIB_SETUP([PGSQL], [PostgreSQL], [postgres])
 AST_EXT_LIB_SETUP([BEANSTALK], [Beanstalk Job Queue], [beanstalk])
 AST_EXT_LIB_SETUP([LIBMNL], [MNL library], [mnl])
+AST_EXT_LIB_SETUP([VEVS], [Vocal EVS Audio Decoder/Encoder], [vevs])
 
 if test "x${PBX_PJPROJECT}" != "x1" ; then
 AST_EXT_LIB_SETUP([PJPROJECT], [PJPROJECT], [pjproject])
@@ -2415,6 +2416,8 @@ AST_EXT_LIB_CHECK([BLUETOOTH], [bluetooth], [ba2str], [bluetooth/bluetooth.h])
 AST_EXT_LIB_CHECK([BEANSTALK], [beanstalk], [bs_version], [beanstalk.h])
 
 AST_EXT_LIB_CHECK([LIBMNL], [mnl], [mnl_socket_open], [libmnl/libmnl.h])
+
+AST_EXT_LIB_CHECK([VEVS])
 
 PG_CONFIG=":"
 if test "${USE_PGSQL}" != "no"; then

@@ -1291,7 +1291,7 @@ static struct ast_channel *wait_for_answer(struct ast_channel *in,
 
 	if (single) {
 		/* Turn off hold music, etc */
-		if (!caller_entertained) {
+		if (0) {
 			ast_deactivate_generator(in);
 			/* If we are calling a single channel, and not providing ringback or music, */
 			/* then, make them compatible for in-band tone purpose */

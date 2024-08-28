@@ -245,6 +245,10 @@ extern struct ast_format *ast_format_silk8;
 extern struct ast_format *ast_format_silk12;
 extern struct ast_format *ast_format_silk16;
 extern struct ast_format *ast_format_silk24;
+/*!
+ * \brief Built-in cached Vocal EVS format.
+ */
+extern struct ast_format *ast_format_vevs;
 
 /*!
  * \brief Initialize format cache support within the core.

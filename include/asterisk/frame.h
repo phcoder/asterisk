@@ -145,6 +145,8 @@ enum {
 	AST_FRFLAG_REQUEUED = (1 << 1),
 	/*! This frame contains a valid sequence number */
 	AST_FRFLAG_HAS_SEQUENCE_NUMBER = (1 << 2),
+	/* This frame needs the marker bit set */
+	AST_FRFLAG_WANTS_MARKER = (1 << 3),
 };
 
 struct ast_frame_subclass {

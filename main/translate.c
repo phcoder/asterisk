@@ -301,6 +301,10 @@ static void destroy(struct ast_trans_pvt *pvt)
 		ao2_ref(pvt->explicit_dst, -1);
 		pvt->explicit_dst = NULL;
 	}
+	if (pvt->explicit_src) {
+		ao2_ref(pvt->explicit_src, -1);
+		pvt->explicit_src = NULL;
+	}
 	ast_free(pvt);
 	ast_module_unref(t->module);
 }
@@ -309,7 +313,7 @@ static void destroy(struct ast_trans_pvt *pvt)
  * \brief Allocate the descriptor, required outbuf space,
  * and possibly desc.
  */
-static struct ast_trans_pvt *newpvt(struct ast_translator *t, struct ast_format *explicit_dst)
+static struct ast_trans_pvt *newpvt(struct ast_translator *t, struct ast_format *explicit_dst, struct ast_format *explicit_src)
 {
 	struct ast_trans_pvt *pvt;
 	int len;
@@ -341,6 +345,7 @@ static struct ast_trans_pvt *newpvt(struct ast_translator *t, struct ast_format 
 	 * knows whether both parties want to do forward-error correction (FEC).
 	 */
 	pvt->explicit_dst = ao2_bump(explicit_dst);
+	pvt->explicit_src = ao2_bump(explicit_src);
 
 	ast_module_ref(t->module);
 
@@ -512,7 +517,7 @@ struct ast_trans_pvt *ast_translator_build_path(struct ast_format *dst, struct a
 		if ((t->dst_codec.sample_rate == ast_format_get_sample_rate(dst)) && (t->dst_codec.type == ast_format_get_type(dst))) {
 			explicit_dst = dst;
 		}
-		if (!(cur = newpvt(t, explicit_dst))) {
+		if (!(cur = newpvt(t, explicit_dst, src))) {
 			ast_log(LOG_WARNING, "Failed to build translator step from %s to %s\n",
 				ast_format_get_name(src), ast_format_get_name(dst));
 			ast_translator_free_path(head);
@@ -708,7 +713,7 @@ static void generate_computational_cost(struct ast_translator *t, int seconds)
 		return;
 	}
 
-	pvt = newpvt(t, NULL);
+	pvt = newpvt(t, NULL, NULL);
 	if (!pvt) {
 		ast_log(LOG_WARNING, "Translator '%s' appears to be broken and will probably fail.\n", t->name);
 		t->comp_cost = 999999;

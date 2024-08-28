@@ -5172,6 +5172,10 @@ static int rtp_raw_write(struct ast_rtp_instance *instance, struct ast_frame *fr
 		rtp->lastts = frame->ts * rate;
 	}
 
+	if (ast_test_flag(frame, AST_FRFLAG_WANTS_MARKER)) {
+		mark = 1;
+	}
+
 	ast_rtp_instance_get_remote_address(instance, &remote_address);
 
 	/* If we know the remote address construct a packet and send it out */

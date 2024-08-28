@@ -898,6 +898,24 @@ static struct ast_codec silk24 = {
 	.samples_count = silk_samples
 };
 
+static int vevs_samp_cnt(struct ast_frame *frame)
+{
+	return 320;
+}
+
+static struct ast_codec vevs = {
+	.name = "vevs",
+	.description = "Vocal EVS",
+	.type = AST_MEDIA_TYPE_AUDIO,
+	.sample_rate = 16000,
+	.minimum_ms = 20,
+	.maximum_ms = 20,
+	.default_ms = 20,
+	.minimum_bytes = 0,
+	.smooth = 0, // no combining payloads!
+	.samples_count = vevs_samp_cnt,
+};
+
 #define CODEC_REGISTER_AND_CACHE(codec) \
 	({ \
 		int __res_ ## __LINE__ = 0; \
@@ -976,6 +994,7 @@ int ast_codec_builtin_init(void)
 	res |= CODEC_REGISTER_AND_CACHE_NAMED("silk12", silk12);
 	res |= CODEC_REGISTER_AND_CACHE_NAMED("silk16", silk16);
 	res |= CODEC_REGISTER_AND_CACHE_NAMED("silk24", silk24);
+	res |= CODEC_REGISTER_AND_CACHE(vevs);
 
 	return res;
 }
