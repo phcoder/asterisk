@@ -1011,6 +1011,15 @@ static pj_status_t volte_registration_client(struct sip_outbound_registration_cl
 	case VOLTE_STATE_REREGISTER:
 	case VOLTE_STATE_UNREGISTER:
 		/* Unregister case. */
+		if (!client_state->challenge) {
+			ast_log(LOG_ERROR, "No response data from previous register.\n");
+			goto out;
+		}
+		if (!client_state->last_tdata) {
+			ast_log(LOG_ERROR, "No transmit data from previous register.\n");
+			goto out;
+		}
+
 		if (!(auth = volte_get_sip_auth(&client_state->outbound_auths)))
 			goto out;
 
@@ -1024,14 +1033,6 @@ static pj_status_t volte_registration_client(struct sip_outbound_registration_cl
 				auth_hdr->challenge.digest.stale = 1;
 		}
 
-		if (!client_state->challenge) {
-			ast_log(LOG_ERROR, "No response data from previous register.\n");
-			goto out;
-		}
-		if (!client_state->last_tdata) {
-			ast_log(LOG_ERROR, "No transmit data from previous register.\n");
-			goto out;
-		}
 		if (strlen(transport_state->volte.cnonce) > sizeof(auth->ims_cnonce)) {
 			ast_log(LOG_ERROR, "Stored nonce is too large, please fix!\n");
 			goto out;
@@ -1491,13 +1492,54 @@ static void registration_transport_shutdown_cb(void *obj)
 	const char *registration_name = obj;
 	struct sip_outbound_registration_state *state;
 
+	ast_log(LOG_WARNING, "PJSIP transport '%s' failed.\n", registration_name);
+
 	state = get_state(registration_name);
 	if (!state) {
 		/* Registration no longer exists or shutting down. */
 		return;
 	}
-	if (ast_sip_push_task(state->client_state->serializer, reregister_immediately_cb, state)) {
-		ao2_ref(state, -1);
+
+	/* VoLTE keeps TCP connection closed until next SIP message (REGISTER/INVITE).
+	 *
+	 * In order remove the TCP transport and close its socket, the all references to that transport must be
+	 * removed. It is important to close the socket, so that it can be opened with the same local and remote
+	 * address (IP+port).
+	 *
+	 * To verify that the transport is removed, add ref counter print to pjsip_transport_add_ref() and
+	 * pjsip_transport_dec_ref() of PJSIP.
+	 */
+	if (state->client_state->volte) {
+		struct ast_sip_transport_state *transport_state = NULL;
+
+		/* Relese TCP transport from previous challenge message. */
+		if (state->client_state->challenge && state->client_state->challenge->tp_info.transport) {
+			pjsip_transport_dec_ref(state->client_state->challenge->tp_info.transport);
+			state->client_state->challenge->tp_info.transport = NULL;
+		}
+		/* Relese TCP transport from last transmitted message. */
+		if (state->client_state->last_tdata && state->client_state->last_tdata->tp_info.transport) {
+			/* There is no ref incremented on the transport.
+			 * We just remove the transport, to prevent use-after-free.
+			 * There shouldn't be any use of the transport, because the
+			 * last_tdata is used only for obtaining data from the last
+			 * transmitted REGISTER message.
+			 */
+			state->client_state->last_tdata->tp_info.transport = NULL;
+		}
+		/* Relese transport from registration process, so reference to TCP transport is dropped. */
+		if (state->client_state->client) {
+			pjsip_regc_release_transport(state->client_state->client);
+		}
+		/* Remove transport reference from volte process. */
+		if (!get_endpoint_transport_transport_state(state->client_state, NULL, NULL, &transport_state)) {
+			transport_state->volte.transport = NULL;
+			ao2_cleanup(transport_state);
+		}
+	} else {
+		if (ast_sip_push_task(state->client_state->serializer, reregister_immediately_cb, state)) {
+			ao2_ref(state, -1);
+		}
 	}
 }
 
@@ -1959,7 +2001,7 @@ volte_failed:
 			}
 			schedule_registration(response->client_state, next_registration_round);
 
-			/* See if we should monitor for transport shutdown */
+			/* See if we should monitor for transport shutdown. Not required with VoLTE. */
 			if (PJSIP_TRANSPORT_IS_RELIABLE(response->rdata->tp_info.transport)) {
 				registration_transport_monitor_setup(response->transport_key,
 					response->client_state->registration_name);

@@ -518,7 +518,7 @@ pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_stat
 	/* Cleanup IPSec transform. */
 	volte_cleanup_xfrm(transport_state);
 
-	/* Cleanup old transports. */
+	/* Cleanup old transport. */
 	old_port_s = pj_sockaddr_get_port(&transport_state->volte.local_addr_s);
 	if (old_port_s > 0 && old_port_s < 65535 && transport_state->volte.transport) {
 		/* Create factory with original transport port. */
@@ -544,8 +544,14 @@ pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_stat
 			return status;
 		}
 	}
-
 	transport_state->volte.transport = NULL;
+
+	/* Reset transport addresses. */
+	if (transport_state->volte.tp_factory) {
+		memset(&transport_state->volte.tp_factory->c_local_addr, 0, sizeof(transport_state->volte.tp_factory->c_local_addr));
+		memset(&transport_state->volte.tp_factory->c_remote_addr, 0, sizeof(transport_state->volte.tp_factory->c_remote_addr));
+		transport_state->volte.tp_factory = NULL;
+	}
 
 	return PJ_SUCCESS;
 }
@@ -662,6 +668,7 @@ pj_status_t volte_set_transport(struct ast_sip_transport_state *transport_state,
 		return status;
 	}
 	transport_state->volte.transport = tdata->tp_info.transport;
+	transport_state->volte.tp_factory = tdata->tp_info.transport->factory;
 
 	return PJ_SUCCESS;
 }

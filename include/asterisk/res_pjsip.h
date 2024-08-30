@@ -130,8 +130,9 @@ struct ast_sip_transport_volte {
 	pj_bool_t remote_sp_c_set, local_sp_s_set;
 	pj_sockaddr local_addr_orig, remote_addr_orig;
 	char security_server[1024];
-	/*! Transport that was used (for reset) */
+	/*! Transport/factory that was used (for reset) */
 	struct pjsip_transport	*transport;
+	struct pjsip_tpfactory	*tp_factory;
 	/*! Assigned URI */
 	char p_associated_uri[1024];
 	/*! Access Network Info */
