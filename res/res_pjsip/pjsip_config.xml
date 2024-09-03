@@ -1525,6 +1525,9 @@
 				<configOption name="dedicated_bearer_up">
 					<synopsis>VoLTE: Do not wait for dedicated bearer status via AMI interface.</synopsis>
 				</configOption>
+				<configOption name="bw_value">
+					<synopsis>VoLTE: Define maximum bandwidth for codecs used. Bandwidth must includes transport headers. (RTP+UDP+IP)</synopsis>
+				</configOption>
 			</configObject>
 			<configObject name="auth">
 				<synopsis>Authentication type</synopsis>

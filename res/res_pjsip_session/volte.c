@@ -41,6 +41,9 @@ static const pj_str_t STR_SUPPORTED_VAL = DEF_STR("supported");
 static const pj_str_t STR_PRECONDITION = DEF_STR("precondition");
 static const pj_str_t STR_P_EARLY_MEDIA = DEF_STR("P-Early-Media");
 static const pj_str_t STR_RECVONLY = DEF_STR("recvonly");
+static const pj_str_t STR_BANDW_MODIFIER_AS = DEF_STR("AS");
+static const pj_str_t STR_BANDW_MODIFIER_RS = DEF_STR("RS");
+static const pj_str_t STR_BANDW_MODIFIER_RR = DEF_STR("RR");
 
 /* Create string header and add given value. */
 static pj_status_t add_value_string_hdr(pjsip_tx_data *tdata, const pj_str_t *name, const pj_str_t *value)
@@ -581,6 +584,60 @@ pj_status_t volte_add_sdp_qos(pj_pool_t *pool, pjmedia_sdp_media *media, struct 
 fail:
 	ast_log(LOG_ERROR, "Failed to create SDP attributes.");
 	return PJ_ENOMEM;
+}
+
+static pj_status_t add_bandwidth_session(pj_pool_t *pool, pjmedia_sdp_session *session, const pj_str_t *modifier,
+					 pj_uint32_t value)
+{
+	pjmedia_sdp_bandw *bandw;
+	if (session->bandw_count == PJMEDIA_MAX_SDP_BANDW) {
+		ast_log(LOG_ERROR, "Too many bandwidth entries? Please fix!");
+		return PJ_EINVAL;
+	}
+
+	bandw = PJ_POOL_ALLOC_T(pool, pjmedia_sdp_bandw);
+	bandw->modifier = *modifier;
+	bandw->value = value;
+	session->bandw[session->bandw_count++] = bandw;
+
+	return PJ_SUCCESS;
+}
+
+static pj_status_t add_bandwidth_media(pj_pool_t *pool, pjmedia_sdp_media *media, const pj_str_t *modifier,
+				       pj_uint32_t value)
+{
+	pjmedia_sdp_bandw *bandw;
+	if (media->bandw_count == PJMEDIA_MAX_SDP_BANDW) {
+		ast_log(LOG_ERROR, "Too many bandwidth entries? Please fix!");
+		return PJ_EINVAL;
+	}
+
+	bandw = PJ_POOL_ALLOC_T(pool, pjmedia_sdp_bandw);
+	bandw->modifier = *modifier;
+	bandw->value = value;
+	media->bandw[media->bandw_count++] = bandw;
+
+	return PJ_SUCCESS;
+}
+
+/* Add bandwidth line to SDP */
+pj_status_t volte_add_sdp_bandwidth_session(pj_pool_t *pool, pjmedia_sdp_session *session, pj_uint32_t bw_value)
+{
+	add_bandwidth_session(pool, session, &STR_BANDW_MODIFIER_AS, bw_value);
+	add_bandwidth_session(pool, session, &STR_BANDW_MODIFIER_RS, 600);
+	add_bandwidth_session(pool, session, &STR_BANDW_MODIFIER_RR, 2000);
+
+	return PJ_SUCCESS;
+}
+
+/* Add bandwidth line to media of SDP */
+pj_status_t volte_add_sdp_bandwidth_media(pj_pool_t *pool, pjmedia_sdp_media *media, pj_uint32_t bw_value)
+{
+	add_bandwidth_media(pool, media, &STR_BANDW_MODIFIER_AS, bw_value);
+	add_bandwidth_media(pool, media, &STR_BANDW_MODIFIER_RS, 600);
+	add_bandwidth_media(pool, media, &STR_BANDW_MODIFIER_RR, 2000);
+
+	return PJ_SUCCESS;
 }
 
 //#define DEBUG_NEGOTIATION

@@ -2300,6 +2300,7 @@ int ast_res_pjsip_initialize_configuration(void)
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "send_aoc", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, send_aoc));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "volte", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, volte));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "dedicated_bearer_up", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, dedicated_bearer_up));
+	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "bw_value", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_endpoint, bw_value));
 
 	if (ast_sip_initialize_sorcery_transport()) {
 		ast_log(LOG_ERROR, "Failed to register SIP transport support with sorcery\n");

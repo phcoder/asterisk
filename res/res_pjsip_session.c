@@ -5616,6 +5616,14 @@ static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, stru
 
 	ast_trace(-1, "%s: Processing streams\n", ast_sip_session_get_name(session));
 
+	/* Add Bandwidth attributes to session. */
+	if (session->endpoint->volte &&
+	    session->precondition_state != AST_SIP_SESSION_PRECONDITION_MO_COMPLETE &&
+	    session->precondition_state != AST_SIP_SESSION_PRECONDITION_MT_COMPLETE) {
+		if (session->endpoint->bw_value)
+			volte_add_sdp_bandwidth_session(inv->pool_prov, local, session->endpoint->bw_value);
+	}
+
 	for (i = 0; i < ast_stream_topology_get_count(session->pending_media_state->topology); ++i) {
 		struct ast_sip_session_media *session_media;
 		struct ast_stream *stream = ast_stream_topology_get_stream(session->pending_media_state->topology, i);
@@ -5653,6 +5661,8 @@ static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, stru
 					volte_confirm_sdp_qos(&session->qos_status[streams]);
 				}
 			}
+			if (session->endpoint->bw_value)
+				volte_add_sdp_bandwidth_media(inv->pool_prov, local->media[streams], session->endpoint->bw_value);
 			volte_add_sdp_qos(inv->pool_prov, local->media[streams], &session->qos_status[streams]);
 		}
 

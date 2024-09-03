@@ -1133,6 +1133,8 @@ struct ast_sip_endpoint {
 	unsigned int volte;
 	/*! Flag to declare dedicated as up, even if not set via AMI interface */
 	unsigned int dedicated_bearer_up;
+	/*! \brief bandwidth value for SDP media */
+	unsigned int bw_value;
 };
 
 /*! URI parameter for symmetric transport */

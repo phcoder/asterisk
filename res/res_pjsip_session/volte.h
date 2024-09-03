@@ -13,6 +13,8 @@ void volte_add_contact_params(pjsip_tx_data *tdata, const char **params);
 void volte_init_sdp_qos(struct ast_sip_session_qos_status *local_status);
 pj_status_t volte_parse_sdp_qos(const pjmedia_sdp_media *media, struct ast_sip_session_qos_status *status);
 pj_status_t volte_add_sdp_qos(pj_pool_t *pool, pjmedia_sdp_media *media, struct ast_sip_session_qos_status *status);
+pj_status_t volte_add_sdp_bandwidth_session(pj_pool_t *pool, pjmedia_sdp_session *session, pj_uint32_t bw_value);
+pj_status_t volte_add_sdp_bandwidth_media(pj_pool_t *pool, pjmedia_sdp_media *media, pj_uint32_t bw_value);
 pj_status_t volte_negotiate_sdp_qos(struct ast_sip_session_qos_status *local_status,
 				    struct ast_sip_session_qos_status *remote_status,
 				    const char *reason);
