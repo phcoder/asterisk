@@ -4914,7 +4914,32 @@ static void handle_outgoing_request(struct ast_sip_session *session, pjsip_tx_da
 	SCOPE_ENTER(3, "%s: Method is %.*s\n", ast_sip_session_get_name(session),
 		(int) pj_strlen(&req.method.name), pj_strbuf(&req.method.name));
 
-	ast_sip_message_apply_transport(session->endpoint->transport, tdata);
+	if (session->endpoint && session->endpoint->volte && !pj_strcmp2(&tdata->msg->line.req.method.name, "INVITE")) {
+		/* Apply transport states (Route) for VoLTE calls. */
+		struct ast_sip_transport_state *transport_state;
+
+		if (get_transport_transport_state(session->endpoint, NULL, &transport_state)) {
+			ast_log(LOG_ERROR, "Failed to get transport state\n");
+			return;
+		}
+		ao2_lock(transport_state);
+
+		if (transport_state->service_routes) {
+			int idx;
+
+			for (idx = 0; idx < AST_VECTOR_SIZE(transport_state->service_routes); ++idx) {
+				char *service_route = AST_VECTOR_GET(transport_state->service_routes, idx);
+
+				ast_sip_add_header(tdata, "Route", service_route);
+			}
+		}
+
+		ao2_unlock(transport_state);
+		ao2_cleanup(transport_state);
+	} else {
+		/* Apply transport states for non-VoLTE calls. */
+		ast_sip_message_apply_transport(session->endpoint->transport, tdata);
+	}
 
 	AST_LIST_TRAVERSE(&session->supplements, supplement, next) {
 		if (supplement->outgoing_request && does_method_match(&req.method.name, supplement->method)) {

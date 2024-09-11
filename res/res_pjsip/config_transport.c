@@ -282,12 +282,6 @@ int ast_sip_transport_state_set_service_routes(const char *transport_name, struc
 		return -1;
 	}
 
-	if (!transport_state->flow) {
-		ao2_ref(transport_state, -1);
-		ast_sip_service_route_vector_destroy(service_routes);
-		return 0;
-	}
-
 	ao2_lock(transport_state);
 	ast_sip_service_route_vector_destroy(transport_state->service_routes);
 	transport_state->service_routes = service_routes;
