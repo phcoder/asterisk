@@ -762,6 +762,7 @@ static int transport_apply(const struct ast_sorcery *sorcery, void *obj)
 		ast_log(LOG_NOTICE, "Transport '%s' is not fully reloadable, not reloading: protocol, bind, TLS (everything but certificate and private key if filename is unchanged), TCP, ToS, or CoS options.\n", transport_id);
 		/* If this is a TLS transport and the certificate or private key has changed, then restart the transport so it uses the new one */
 		if (transport->type == AST_TRANSPORT_TLS) {
+#if defined(PJ_HAS_SSL_SOCK) && PJ_HAS_SSL_SOCK != 0
 			if (strcmp(perm_state->transport->cert_file, temp_state->transport->cert_file) ||
 				strcmp(perm_state->transport->privkey_file, temp_state->transport->privkey_file)) {
 				ast_log(LOG_ERROR, "Unable to restart TLS transport '%s' as certificate or private key filename has changed\n",
@@ -774,6 +775,7 @@ static int transport_apply(const struct ast_sorcery *sorcery, void *obj)
 					sprintf(perm_state->state->factory->info, "%s", transport_id);
 				}
 			}
+#endif
 		}
 #else
 		ast_log(LOG_NOTICE, "Transport '%s' is not fully reloadable, not reloading: protocol, bind, TLS, TCP, ToS, or CoS options.\n", transport_id);
