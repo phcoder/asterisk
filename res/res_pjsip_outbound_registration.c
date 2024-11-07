@@ -2162,7 +2162,8 @@ static void sip_outbound_registration_response_cb(struct pjsip_regc_cbparam *par
 
 	/* Also reference last_tdata to old_request, for use during unregister. */
 	client_state->last_tdata = response->old_request;
-	pjsip_tx_data_add_ref(client_state->last_tdata);
+	if (client_state->last_tdata)
+		pjsip_tx_data_add_ref(client_state->last_tdata);
 
 	/*
 	 * Transfer response reference to serializer task so the
