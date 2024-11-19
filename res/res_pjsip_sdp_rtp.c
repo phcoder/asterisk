@@ -252,7 +252,12 @@ static int create_rtp(struct ast_sip_session *session, struct ast_sip_session_me
 			if (trans_state) {
 				char hoststr[PJ_INET6_ADDRSTRLEN];
 
-				pj_sockaddr_print(&trans_state->host, hoststr, sizeof(hoststr), 0);
+				if (trans_state->volte.local_addr_c.addr.sa_family == PJ_AF_INET ||
+				    trans_state->volte.local_addr_c.addr.sa_family == PJ_AF_INET6) {
+					pj_sockaddr_print(&trans_state->volte.local_addr_c, hoststr, sizeof(hoststr), 0);
+				} else {
+					pj_sockaddr_print(&trans_state->host, hoststr, sizeof(hoststr), 0);
+				}
 				if (ast_sockaddr_parse(&temp_media_address, hoststr, 0)) {
 					ast_debug_rtp(1, "Transport %s bound to %s: Using it for RTP media.\n",
 						session->endpoint->transport, hoststr);
