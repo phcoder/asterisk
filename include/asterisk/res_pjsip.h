@@ -117,6 +117,8 @@ static const pj_str_t AST_PJ_STR_EMPTY = { "", 0 };
  * \brief Local ports for client and server to use with IMS
  */
 struct ast_sip_transport_volte {
+	/*! Currently registered, transport is valid. */
+	pj_bool_t registered;
 	/*! Current local ports used */
 	int local_port_c, local_port_s;
 	/*! Current states for sec-agree */

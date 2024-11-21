@@ -1234,10 +1234,12 @@ static int handle_client_registration(void *data)
 	}
 
 	/* If we are already registered, we use re-register process (keep TCP transport) */
-	if (client_state->volte_state == VOLTE_STATE_REGISTERED) {
-		volte_set_state(client_state, VOLTE_STATE_REREGISTER);
-	} else {
-		volte_set_state(client_state, VOLTE_STATE_REGISTER);
+	if (client_state->volte) {
+		if (client_state->volte_state == VOLTE_STATE_REGISTERED) {
+			volte_set_state(client_state, VOLTE_STATE_REREGISTER);
+		} else {
+			volte_set_state(client_state, VOLTE_STATE_REGISTER);
+		}
 	}
 
 	registration_client_send(client_state, tdata);
@@ -1837,6 +1839,41 @@ static void sip_outbound_registration_timer_cb(pj_timer_heap_t *timer_heap, stru
 	}
 }
 
+static int volte_set_transport_state(struct sip_outbound_registration_client_state *client_state, pj_bool_t registered)
+{
+	struct ast_sip_transport_state *transport_state = NULL;
+	int ret = -1;
+
+	if (get_endpoint_transport_transport_state(client_state, NULL, NULL, &transport_state))
+		goto out;
+	ao2_lock(transport_state);
+
+	transport_state->volte.registered = registered;
+	ret = 0;
+out:
+	if (transport_state)
+		ao2_unlock(transport_state);
+	ao2_cleanup(transport_state);
+	return ret;
+}
+
+static pj_bool_t volte_get_transport_state(struct sip_outbound_registration_client_state *client_state)
+{
+	struct ast_sip_transport_state *transport_state = NULL;
+	int ret = PJ_FALSE;
+
+	if (get_endpoint_transport_transport_state(client_state, NULL, NULL, &transport_state))
+		goto out;
+	ao2_lock(transport_state);
+
+	ret = transport_state->volte.registered;
+out:
+	if (transport_state)
+		ao2_unlock(transport_state);
+	ao2_cleanup(transport_state);
+	return ret;
+}
+
 /*! \brief Callback function for handling a response to a registration attempt */
 static int handle_registration_response(void *data)
 {
@@ -1970,7 +2007,10 @@ static int handle_registration_response(void *data)
 volte_failed:
 
 	if (!PJSIP_IS_STATUS_IN_CLASS(response->code, 200)) {
-		volte_set_state(response->client_state, VOLTE_STATE_UNREGISTERED);
+		if (response->client_state->volte) {
+			volte_set_state(response->client_state, VOLTE_STATE_UNREGISTERED);
+			volte_set_transport_state(response->client_state, PJ_FALSE);
+		}
 	}
 	response->client_state->auth_attempted = 0;
 	response->client_state->resync_attempted = 0;
@@ -2007,7 +2047,10 @@ volte_failed:
 					response->client_state->registration_name);
 			}
 
-			volte_set_state(response->client_state, VOLTE_STATE_REGISTERED);
+			if (response->client_state->volte) {
+				volte_set_state(response->client_state, VOLTE_STATE_REGISTERED);
+				volte_set_transport_state(response->client_state, PJ_TRUE);
+			}
 		} else {
 			ast_debug(1, "Outbound unregistration to '%s' with client '%s' successful\n", server_uri, client_uri);
 			update_client_state_status(response->client_state, SIP_REGISTRATION_UNREGISTERED);
@@ -2016,7 +2059,10 @@ volte_failed:
 					registration_transport_shutdown_cb, response->client_state->registration_name,
 					monitor_matcher);
 			}
-			volte_set_state(response->client_state, VOLTE_STATE_UNREGISTERED);
+			if (response->client_state->volte) {
+				volte_set_state(response->client_state, VOLTE_STATE_UNREGISTERED);
+				volte_set_transport_state(response->client_state, PJ_FALSE);
+			}
 		}
 
 		save_response_fields_to_transport(response);
@@ -2862,6 +2908,11 @@ static int unregister_task(void *obj)
 
 static int queue_unregister(struct sip_outbound_registration_state *state)
 {
+	if (state->client_state->volte && !volte_get_transport_state(state->client_state)) {
+		ast_log(LOG_NOTICE, "No VoLTE transport, endpoint is not registered.\n");
+		return -1;
+	}
+
 	ao2_ref(state, +1);
 	if (ast_sip_push_task(state->client_state->serializer, unregister_task, state)) {
 		ao2_ref(state, -1);

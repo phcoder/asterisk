@@ -252,8 +252,10 @@ static int create_rtp(struct ast_sip_session *session, struct ast_sip_session_me
 			if (trans_state) {
 				char hoststr[PJ_INET6_ADDRSTRLEN];
 
-				if (trans_state->volte.local_addr_c.addr.sa_family == PJ_AF_INET ||
-				    trans_state->volte.local_addr_c.addr.sa_family == PJ_AF_INET6) {
+				/* If a VoLTE endpoint is registered, use local IP of its transport. */
+				if (trans_state->volte.registered &&
+				    (trans_state->volte.local_addr_c.addr.sa_family == PJ_AF_INET ||
+				     trans_state->volte.local_addr_c.addr.sa_family == PJ_AF_INET6)) {
 					pj_sockaddr_print(&trans_state->volte.local_addr_c, hoststr, sizeof(hoststr), 0);
 				} else {
 					pj_sockaddr_print(&trans_state->host, hoststr, sizeof(hoststr), 0);

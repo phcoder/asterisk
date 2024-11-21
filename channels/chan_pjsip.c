@@ -2692,8 +2692,28 @@ static int request(void *obj)
 		}
 	}
 
+	if (endpoint->volte) {
+		struct ast_sip_transport *transport;
+
+		transport = ast_sorcery_retrieve_by_id(ast_sip_get_sorcery(), "transport",
+			endpoint->transport);
+		if (transport) {
+			struct ast_sip_transport_state *trans_state;
+
+			trans_state = ast_sip_get_transport_state(ast_sorcery_object_get_id(transport));
+			if (trans_state) {
+				if (!trans_state->volte.registered) {
+					req_data->cause = AST_CAUSE_DESTINATION_OUT_OF_ORDER;
+					ast_log(LOG_NOTICE, "No VoLTE transport, no registration for endpoint '%s'\n", endpoint_name);
+					SCOPE_EXIT_RTN_VALUE(-1);
+				}
+			}
+		}
+	}
+
 	session = ast_sip_session_create_outgoing(endpoint, NULL, args.aor, request_user,
 		req_data->topology);
+
 	ao2_ref(endpoint, -1);
 	if (!session) {
 		ast_log(LOG_ERROR, "Failed to create outgoing session to endpoint '%s'\n", endpoint_name);
