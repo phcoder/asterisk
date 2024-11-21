@@ -149,7 +149,7 @@ static enum ftmp_bw ftmp_bw_parse(char *in) {
 #define wrap_ast_str_append(...) fprintf(stderr, __VA_ARGS__)
 #else
 #define wrap_ast_str_append(...) ast_str_append(str, 0, __VA_ARGS__)
-#define wrap_ast_fprintf(...) ast_log(LOG_ERROR, __VA_ARGS__)
+#define wrap_ast_fprintf(...) ast_log(LOG_DEBUG, __VA_ARGS__)
 #endif
 
 void print_codec_settings(evs_attr *a);
