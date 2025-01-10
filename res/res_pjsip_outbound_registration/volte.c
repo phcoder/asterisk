@@ -757,6 +757,9 @@ pj_status_t volte_get_security_server(struct ast_sip_transport_state *transport_
 			if (++idx == 8)
 				break;
 		}
+		/* Eat spaces */
+		while (*scanner.curptr <= ' ')
+			pj_scan_get_char(&scanner);
 	}
 	pj_scan_fini(&scanner);
 
