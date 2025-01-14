@@ -552,6 +552,7 @@ struct registration_response {
 	char transport_key[IP6ADDR_COLON_PORT_BUFLEN];
 	/*! \breif USIM authentication response */
 	uint8_t sim_res[8];
+	int sim_res_len;
 	uint8_t sim_ik[16];
 	uint8_t sim_ck[16];
 	uint8_t sim_auts[14];
@@ -1667,7 +1668,7 @@ static int handle_volte_unauthorized(struct registration_response *response, uin
 		ast_debug(1, "Processing Authentication response from SIM\n");
 		/* Registration response from SIM */
 		memcpy(auth->ims_res, response->sim_res, 8);
-		auth->ims_res_len = 8;
+		auth->ims_res_len = response->sim_res_len;
 		memcpy(out_ik, response->sim_ik, 16);
 		memcpy(out_ck, response->sim_ck, 16);
 		response->client_state->volte_response = NULL;
@@ -3188,7 +3189,13 @@ static int ami_authresponse(struct mansession *s, const struct message *m)
 	cancel_sim_timer(response);
 
 	if (res_str[0] && ik_str[0] && ck_str[0] && !auts_str[0]) {
-		if (volte_hex_to_octet_string("RES", res_str, response->sim_res, sizeof(response->sim_res))) {
+		response->sim_res_len = strlen(res_str) / 2;
+		if (response->sim_res_len > sizeof(response->sim_res)) {
+			ast_log(LOG_ERROR, "USIM RES value too long (%d), truncating to %d! Please fix!\n",
+				response->sim_res_len, (int)sizeof(response->sim_res));
+			response->sim_res_len = sizeof(response->sim_res);
+		}
+		if (volte_hex_to_octet_string("RES", res_str, response->sim_res, response->sim_res_len)) {
 			ast_log(LOG_ERROR, "SIM card responded: RES value invalid.\n");
 			astman_send_error(s, m, "RES value invalid\n");
 			ao2_ref(state, -1);
