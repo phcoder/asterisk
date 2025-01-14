@@ -870,10 +870,12 @@ pj_status_t volte_hex_to_octet_string(const char *name, const char *input, uint8
 	return PJ_SUCCESS;
 }
 
-pj_status_t volte_get_auth(pjsip_rx_data *rdata, pjsip_hdr_e auth_type, pj_str_t *algo, uint8_t *rand, uint8_t *autn)
+pj_status_t volte_get_auth(pjsip_rx_data *rdata, pjsip_hdr_e auth_type, pj_str_t *algo, uint8_t *rand, uint8_t *autn,
+			   uint8_t *server_data, size_t *sizeof_server_data)
 {
 	pjsip_www_authenticate_hdr *auth_hdr;
-	uint8_t rand_autn[32];
+	uint8_t rand_autn_sdata[128];
+	int length;
 
 	auth_hdr = pjsip_msg_find_hdr(rdata->msg_info.msg, auth_type, NULL);
 	if (!auth_hdr || !auth_hdr->challenge.digest.nonce.ptr || !auth_hdr->challenge.digest.algorithm.ptr) {
@@ -892,10 +894,26 @@ pj_status_t volte_get_auth(pjsip_rx_data *rdata, pjsip_hdr_e auth_type, pj_str_t
 
 	*algo = auth_hdr->challenge.digest.algorithm;
 
-	ast_base64decode(rand_autn, auth_hdr->challenge.digest.nonce.ptr, sizeof(rand_autn));
+	char nonce[auth_hdr->challenge.digest.nonce.slen + 1];
+	memcpy(nonce, auth_hdr->challenge.digest.nonce.ptr, sizeof(nonce) - 1);
+	nonce[sizeof(nonce) - 1] = '\0';
+	length = ast_base64decode(rand_autn_sdata, nonce, sizeof(rand_autn_sdata));
 
-	memcpy(rand, rand_autn, 16);
-	memcpy(autn, rand_autn + 16, 16);
+	if (length < 32) {
+		ast_log(LOG_ERROR, "'nonce' in authentication header less than 32 bytes. Cannot proceed!\n");
+		return -EINVAL;
+	}
+	if (server_data && length - 32 > *sizeof_server_data) {
+		ast_log(LOG_ERROR, "Server data in 'nonce' out of range.\n");
+		return -EINVAL;
+	}
+	memcpy(rand, rand_autn_sdata, 16);
+	memcpy(autn, rand_autn_sdata + 16, 16);
+	if (server_data && length > 32) {
+		/* See RFC 3310 */
+		memcpy(server_data, rand_autn_sdata + 32, length - 32);
+		*sizeof_server_data = length - 32;
+	}
 
 	return PJ_SUCCESS;
 }

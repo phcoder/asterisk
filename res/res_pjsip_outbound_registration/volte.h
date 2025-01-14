@@ -33,7 +33,8 @@ pj_status_t volte_get_security_server(struct ast_sip_transport_state *transport_
 				      struct security_server *sec);
 pj_status_t volte_add_security_verify(struct ast_sip_transport_state *transport_state, pjsip_tx_data *tdata);
 pj_status_t volte_hex_to_octet_string(const char *name, const char *input, uint8_t *output, size_t output_size);
-pj_status_t volte_get_auth(pjsip_rx_data *rdata, pjsip_hdr_e auth_type, pj_str_t *algo, uint8_t *rand, uint8_t *autn);
+pj_status_t volte_get_auth(pjsip_rx_data *rdata, pjsip_hdr_e auth_type, pj_str_t *algo, uint8_t *rand, uint8_t *autn,
+			   uint8_t *server_data, size_t *sizeof_server_data);
 pj_status_t volte_send_authrequest(const char *registration_name, pj_str_t *algo, uint8_t *rand, uint8_t *autn);
 pj_status_t volte_authenticate(const char *opc_str, const char *k_str, const char *sqn_str, uint8_t *rand,
 			       uint8_t *autn, uint8_t *out_res, int *out_res_len, uint8_t *out_ik, uint8_t *out_ck,

@@ -1699,7 +1699,7 @@ static int handle_volte_unauthorized(struct registration_response *response, uin
 
 		if (volte_get_auth(response->rdata,
 				   (response->code == 401) ? PJSIP_H_WWW_AUTHENTICATE : PJSIP_H_PROXY_AUTHENTICATE,
-				   &algo, rand, autn)) {
+				   &algo, rand, autn, NULL, NULL)) {
 			ast_log(LOG_ERROR, "Failed to parse the authenticate header.\n");
 			goto out;
 		}
