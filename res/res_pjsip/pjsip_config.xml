@@ -1525,6 +1525,14 @@
 				<configOption name="dedicated_bearer_up">
 					<synopsis>VoLTE: Do not wait for dedicated bearer status via AMI interface.</synopsis>
 				</configOption>
+				<configOption name="dedicated_bearer_up_delayms">
+					<synopsis>VoLTE: Time to wait in ms until sending UPDATE.</synopsis>
+					<description><para>
+						If we do not wait for dedicated bearer via AMI interface ('dedicated_bearer_up'
+						is set to 'yes'), we need to delay some time, so we can assume that the dedicated
+						brarer is up. The default is 500 ms.
+					</para></description>
+				</configOption>
 				<configOption name="bw_value">
 					<synopsis>VoLTE: Define maximum bandwidth for codecs used. Bandwidth must includes transport headers. (RTP+UDP+IP)</synopsis>
 				</configOption>

@@ -3048,6 +3048,53 @@ static int datastore_cmp(void *obj, void *arg, int flags)
 	return strcmp(datastore1->uid, uid2) ? 0 : CMP_MATCH | CMP_STOP;
 }
 
+/*! \brief Helper function which cancels the timer for automatic precondition */
+static void cancel_precondition_timer(struct ast_sip_session *session)
+{
+	if (pj_timer_heap_cancel_if_active(pjsip_endpt_get_timer_heap(ast_sip_get_pjsip_endpoint()),
+		&session->precondition_timer, session->precondition_timer.id)) {
+		/* The timer was successfully cancelled, drop the refcount of session. */
+		ao2_ref(session, -1);
+	}
+}
+
+static void session_precondition_send_update(struct ast_sip_session *session)
+{
+	enum ast_sip_session_refresh_method method = AST_SIP_SESSION_REFRESH_METHOD_UPDATE;
+	int generate_new_sdp = PJ_TRUE;
+	int i;
+
+	session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_UPDATE;
+	for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
+		volte_update_sdp_qos(&session->qos_status[i]);
+	}
+	ast_sip_session_refresh(session, NULL, NULL, NULL, method, generate_new_sdp, NULL);
+}
+
+static int session_precondition_timeout(void *data)
+{
+	struct ast_sip_session *session = data;
+
+	ast_debug(1, "%s: Precondition timer fired.\n", ast_sip_session_get_name(session));
+	if (session->precondition_state == AST_SIP_SESSION_PRECONDITION_MO_WAIT_BEARER) {
+		ast_debug(1, "%s: Precondition state is send UPDATE to complete.\n",
+			  ast_sip_session_get_name(session));
+		session_precondition_send_update(session);
+	}
+
+	ao2_ref(session, -1);
+	return 0;
+}
+
+static void session_precondition_timer_cb(pj_timer_heap_t *timer_heap, struct pj_timer_entry *entry)
+{
+	struct ast_sip_session *session = entry->user_data;
+
+	if (ast_sip_push_task(session->serializer, session_precondition_timeout, session)) {
+		ao2_ref(session, -1);
+	}
+}
+
 static void session_destructor(void *obj)
 {
 	struct ast_sip_session *session = obj;
@@ -3195,6 +3242,7 @@ struct ast_sip_session *ast_sip_session_alloc(struct ast_sip_endpoint *endpoint,
 		for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
 			volte_init_sdp_qos(&session->qos_status[i]);
 		}
+		pj_timer_entry_init(&session->precondition_timer, 0, session, session_precondition_timer_cb);
 	}
 
 	session->endpoint = ao2_bump(endpoint);
@@ -4847,17 +4895,25 @@ static void handle_incoming_response(struct ast_sip_session *session, pjsip_rx_d
 				}
 			}
 		}
-		if (session->dedicated_bearer_up || session->endpoint->dedicated_bearer_up) {
-			enum ast_sip_session_refresh_method method = AST_SIP_SESSION_REFRESH_METHOD_UPDATE;
-			int generate_new_sdp = PJ_TRUE;
-
+		if (session->dedicated_bearer_up) {
+			/* AMI already reported that dedicated bearer is up */
 			ast_debug(1, "%s: Precondition state is waiting for UPDATE to complete.\n",
 				  ast_sip_session_get_name(session));
-			session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_UPDATE;
-			for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
-				volte_update_sdp_qos(&session->qos_status[i]);
+			session_precondition_send_update(session);
+		} else if (session->endpoint->dedicated_bearer_up) {
+			int res;
+			/* Automatically set dedicated bearer to up after given time */
+			pj_time_val delay = { .sec = session->endpoint->dedicated_bearer_up_delayms / 1000,
+					      .msec = session->endpoint->dedicated_bearer_up_delayms % 1000};
+			ao2_ref(session, +1);
+			res = (pjsip_endpt_schedule_timer(ast_sip_get_pjsip_endpoint(),
+				&session->precondition_timer, &delay) != PJ_SUCCESS) ? -1 : 0;
+			if (res) {
+				ao2_ref(session, -1);
 			}
-			ast_sip_session_refresh(session, NULL, NULL, NULL, method, generate_new_sdp, NULL);
+			ast_debug(1, "%s: Precondition state is waiting for timer to expire or dedicated bearer.\n",
+				  ast_sip_session_get_name(session));
+			session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_WAIT_BEARER;
 		} else {
 			ast_debug(1, "%s: Precondition state is waiting for dedicaed bearer.\n",
 				  ast_sip_session_get_name(session));
@@ -6108,7 +6164,6 @@ static int ami_dedicatedbearerstatus(struct mansession *s, const struct message 
 	struct ast_channel *ast = NULL;
 	struct ast_sip_channel_pvt *channel;
 	struct ast_sip_session *session;
-	int i;
 
 	if (!status_str || !status_str[0]) {
 		ast_log(LOG_ERROR, "DedicatedBearerStatus: Status parameter missing.\n");
@@ -6159,12 +6214,8 @@ static int ami_dedicatedbearerstatus(struct mansession *s, const struct message 
 		if (session->dedicated_bearer_up) {
 			ast_debug(1, "%s: Precondition state is send UPDATE to complete.\n",
 				  ast_sip_session_get_name(session));
-			session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_UPDATE;
-			for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
-				volte_update_sdp_qos(&session->qos_status[i]);
-			}
-			ast_sip_session_refresh(session, NULL, NULL, NULL,
-						AST_SIP_SESSION_REFRESH_METHOD_UPDATE, PJ_TRUE, NULL);
+			cancel_precondition_timer(session);
+			session_precondition_send_update(session);
 		}
 		break;
 	case AST_SIP_SESSION_PRECONDITION_MT_WAIT_BEARER:
