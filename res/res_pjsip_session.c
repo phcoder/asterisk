@@ -5746,6 +5746,8 @@ static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, stru
 				volte_add_sdp_bandwidth_media(inv->pool_prov, local->media[streams], session->endpoint->bw_value);
 			volte_add_sdp_qos(inv->pool_prov, local->media[streams], &session->qos_status[streams]);
 		}
+		if (session->endpoint->hack_evs && session->precondition_state == AST_SIP_SESSION_PRECONDITION_MT_WAIT_UPDATE)
+			hack_evs(local->media[streams]);
 
 		/* If a stream was actually added then add any additional details */
 		if (streams != local->media_count) {

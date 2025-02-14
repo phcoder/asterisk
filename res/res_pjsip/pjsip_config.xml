@@ -1536,6 +1536,9 @@
 				<configOption name="bw_value">
 					<synopsis>VoLTE: Define maximum bandwidth for codecs used. Bandwidth must includes transport headers. (RTP+UDP+IP)</synopsis>
 				</configOption>
+				<configOption name="hack_evs">
+					<synopsis>VoLTE: Internal debugging feature.</synopsis>
+				</configOption>
 			</configObject>
 			<configObject name="auth">
 				<synopsis>Authentication type</synopsis>

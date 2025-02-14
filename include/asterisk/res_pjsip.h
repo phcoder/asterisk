@@ -1139,6 +1139,8 @@ struct ast_sip_endpoint {
 	unsigned int dedicated_bearer_up_delayms;
 	/*! \brief bandwidth value for SDP media */
 	unsigned int bw_value;
+	/*! \brief EVS hack */
+	unsigned int hack_evs;
 };
 
 /*! URI parameter for symmetric transport */

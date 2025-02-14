@@ -21,3 +21,4 @@ pj_status_t volte_negotiate_sdp_qos(struct ast_sip_session_qos_status *local_sta
 pj_status_t volte_update_sdp_qos(struct ast_sip_session_qos_status *local_status);
 pj_status_t volte_confirm_sdp_qos(struct ast_sip_session_qos_status *local_status);
 pj_bool_t volte_is_supported_precondition(pjsip_rx_data *rdata);
+pj_status_t hack_evs(pjmedia_sdp_media *media);

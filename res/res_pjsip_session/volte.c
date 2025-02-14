@@ -764,3 +764,27 @@ pj_bool_t volte_is_supported_precondition(pjsip_rx_data *rdata)
 
 	return PJ_FALSE;
 }
+
+static const pj_str_t STR_BW = DEF_STR("bw=nb-wb");
+
+pj_status_t hack_evs(pjmedia_sdp_media *media)
+{
+	pjmedia_sdp_attr *attr;
+	pj_status_t status = PJ_EINVAL;
+	int i, offset;
+	char *p;
+
+	for (i = 0; i < media->attr_count; i++) {
+		attr = media->attr[i];
+		if (!!pj_strcmp2(&attr->name, "fmtp"))
+			continue;
+		if (!(p = pj_strstr(&attr->value, &STR_BW)))
+			continue;
+		offset = p - attr->value.ptr;
+		memmove(p + 5, p + 8, attr->value.slen - offset - 8);
+		attr->value.slen -= 3;
+		status = PJ_SUCCESS;
+	}
+
+	return status;
+}
