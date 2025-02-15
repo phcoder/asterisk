@@ -7,6 +7,7 @@
 #include <ctype.h>                      /* for tolower */
 
 #include "asterisk/config.h"
+#include "asterisk/codec.h"
 #include "asterisk/format_cache.h"
 #include "asterisk/module.h"
 #include "asterisk/format.h"
@@ -685,7 +686,7 @@ static void ast_parse_ftmp(char *attribs, evs_attr *codec_att) {
   }
 
   if ((tmp = strstr(attribs, "br="))) {
-    int scanned = sscanf(tmp, "br=%4[^-]-%4[^-]", stmp1, stmp2);
+    int scanned = sscanf(tmp, "br=%4[^-;]-%4[^-;]", stmp1, stmp2);
     if (scanned > 0) {
       codec_att->ftmp_range_br.a.val = ftmp_br_parse(stmp1);
       codec_att->ftmp_range_br.a.set = 1;
@@ -697,7 +698,7 @@ static void ast_parse_ftmp(char *attribs, evs_attr *codec_att) {
   }
 
   if ((tmp = strstr(attribs, "br-send="))) {
-    int scanned = sscanf(tmp, "br-send=%4[^-]-%4[^-]", stmp1, stmp2);
+    int scanned = sscanf(tmp, "br-send=%4[^-;]-%4[^-;]", stmp1, stmp2);
     if (scanned > 0) {
       codec_att->ftmp_range_br_send.a.val = ftmp_br_parse(stmp1);
       codec_att->ftmp_range_br_send.a.set = 1;
@@ -709,7 +710,7 @@ static void ast_parse_ftmp(char *attribs, evs_attr *codec_att) {
   }
 
   if ((tmp = strstr(attribs, "br-recv="))) {
-    int scanned = sscanf(tmp, "br-recv=%4[^-]-%4[^-]", stmp1, stmp2);
+    int scanned = sscanf(tmp, "br-recv=%4[^-;]-%4[^-;]", stmp1, stmp2);
     if (scanned > 0) {
       codec_att->ftmp_range_br_recv.a.val = ftmp_br_parse(stmp1);
       codec_att->ftmp_range_br_recv.a.set = 1;
@@ -721,7 +722,7 @@ static void ast_parse_ftmp(char *attribs, evs_attr *codec_att) {
   }
 
   if ((tmp = strstr(attribs, "bw="))) {
-    int scanned = sscanf(tmp, "bw=%4[^-]-%4[^-]", stmp1, stmp2);
+    int scanned = sscanf(tmp, "bw=%4[^-;]-%4[^-;]", stmp1, stmp2);
     if (scanned > 0) {
       codec_att->ftmp_range_bw.a.val = ftmp_bw_parse(stmp1);
       codec_att->ftmp_range_bw.a.set = 1;
@@ -733,7 +734,7 @@ static void ast_parse_ftmp(char *attribs, evs_attr *codec_att) {
   }
 
   if ((tmp = strstr(attribs, "bw-send="))) {
-    int scanned = sscanf(tmp, "bw-send=%4[^-]-%4[^-]", stmp1, stmp2);
+    int scanned = sscanf(tmp, "bw-send=%4[^-;]-%4[^-;]", stmp1, stmp2);
     if (scanned > 0) {
       codec_att->ftmp_range_bw_send.a.val = ftmp_bw_parse(stmp1);
       codec_att->ftmp_range_bw_send.a.set = 1;
@@ -745,7 +746,7 @@ static void ast_parse_ftmp(char *attribs, evs_attr *codec_att) {
   }
 
   if ((tmp = strstr(attribs, "bw-recv="))) {
-    int scanned = sscanf(tmp, "bw-recv=%4[^-]-%4[^-]", stmp1, stmp2);
+    int scanned = sscanf(tmp, "bw-recv=%4[^-;]-%4[^-;]", stmp1, stmp2);
     if (scanned > 0) {
       codec_att->ftmp_range_bw_recv.a.val = ftmp_bw_parse(stmp1);
       codec_att->ftmp_range_bw_recv.a.set = 1;
@@ -947,6 +948,10 @@ static struct ast_format *evs_getjoint(const struct ast_format *format1, const s
 
   AT_CMP_RANGE(attr_res->ftmp_range_br, attr1->ftmp_range_br, attr2->ftmp_range_br)
   AT_CMP_RANGE(attr_res->ftmp_range_bw, attr1->ftmp_range_bw, attr2->ftmp_range_bw)
+  /* Limit bitrate to 5.9. */
+  attr_res->ftmp_range_br.a.set = 1;
+  attr_res->ftmp_range_br.a.val = DEF_ftmp_br5_9;
+  attr_res->ftmp_range_br.b.set = 0;
 
   attr_res->ftmp_max_red.val = MIN(attr1->ftmp_max_red.val,attr2->ftmp_max_red.val);
   attr_res->ftmp_max_red.set = MAX(attr1->ftmp_max_red.set,attr2->ftmp_max_red.set);
