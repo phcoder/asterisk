@@ -1481,6 +1481,24 @@ static int reregister_immediately_cb(void *obj)
 	return 0;
 }
 
+static int volte_set_transport_state(struct sip_outbound_registration_client_state *client_state, pj_bool_t registered)
+{
+	struct ast_sip_transport_state *transport_state = NULL;
+	int ret = -1;
+
+	if (get_endpoint_transport_transport_state(client_state, NULL, NULL, &transport_state))
+		goto out;
+	ao2_lock(transport_state);
+
+	transport_state->volte.registered = registered;
+	ret = 0;
+out:
+	if (transport_state)
+		ao2_unlock(transport_state);
+	ao2_cleanup(transport_state);
+	return ret;
+}
+
 /*!
  * \internal
  * \brief The reliable transport we registered using has shutdown.
@@ -1538,6 +1556,11 @@ static void registration_transport_shutdown_cb(void *obj)
 		if (!get_endpoint_transport_transport_state(state->client_state, NULL, NULL, &transport_state)) {
 			transport_state->volte.transport = NULL;
 			ao2_cleanup(transport_state);
+		}
+		volte_set_state(state->client_state, VOLTE_STATE_UNREGISTERED);
+		volte_set_transport_state(state->client_state, PJ_FALSE);
+		if (ast_sip_push_task(state->client_state->serializer, reregister_immediately_cb, state)) {
+			ao2_ref(state, -1);
 		}
 	} else {
 		if (ast_sip_push_task(state->client_state->serializer, reregister_immediately_cb, state)) {
@@ -1838,24 +1861,6 @@ static void sip_outbound_registration_timer_cb(pj_timer_heap_t *timer_heap, stru
 		ast_log(LOG_WARNING, "Scheduled outbound registration could not be executed.\n");
 		ao2_ref(client_state, -1);
 	}
-}
-
-static int volte_set_transport_state(struct sip_outbound_registration_client_state *client_state, pj_bool_t registered)
-{
-	struct ast_sip_transport_state *transport_state = NULL;
-	int ret = -1;
-
-	if (get_endpoint_transport_transport_state(client_state, NULL, NULL, &transport_state))
-		goto out;
-	ao2_lock(transport_state);
-
-	transport_state->volte.registered = registered;
-	ret = 0;
-out:
-	if (transport_state)
-		ao2_unlock(transport_state);
-	ao2_cleanup(transport_state);
-	return ret;
 }
 
 static pj_bool_t volte_get_transport_state(struct sip_outbound_registration_client_state *client_state)
