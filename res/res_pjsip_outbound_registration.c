@@ -218,7 +218,10 @@
 					<synopsis>Perform Voice over LTE SIP registration process.</synopsis>
 				</configOption>
 				<configOption name="imei">
-					<synopsis>Set IMEI in contact header for VoLTE calls.</synopsis>
+					<synopsis>Set IMEI in contact header for VoLTE calls, if given.</synopsis>
+				</configOption>
+				<configOption name="accesstype">
+					<synopsis>Set +g.3gpp.accesstype in contact header for VoLTE calls, if given.</synopsis>
 				</configOption>
 			</configObject>
 		</configFile>
@@ -376,6 +379,8 @@ struct sip_outbound_registration {
 		AST_STRING_FIELD(endpoint);
 		/*! \brief IMEI for VoLTE calls */
 		AST_STRING_FIELD(imei);
+		/*! \brief IMEI for VoLTE calls */
+		AST_STRING_FIELD(accesstype);
 	);
 	/*! \brief Requested expiration time */
 	unsigned int expiration;
@@ -2661,7 +2666,7 @@ static int sip_outbound_registration_regc_alloc(void *data)
 	if (registration->volte) {
 		ast_pbx_uuid_get(uuid_buf, sizeof(uuid_buf));
 		contact_user = uuid_buf;
-		contact_header_params = volte_add_contact_params(registration->imei);
+		contact_header_params = volte_add_contact_params(registration->imei, registration->accesstype);
 	} else {
 		contact_user = S_OR(registration->contact_user, "s");
 		contact_header_params = registration->contact_header_params;
@@ -3738,6 +3743,7 @@ static int load_module(void)
 	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "manual_register", "no", OPT_BOOL_T, 1, FLDSET(struct sip_outbound_registration, manual_register));
 	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "volte", "no", OPT_BOOL_T, 1, FLDSET(struct sip_outbound_registration, volte));
 	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "imei", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct sip_outbound_registration, imei));
+	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "accesstype", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct sip_outbound_registration, accesstype));
 
 	/*
 	 * Register sorcery observers.

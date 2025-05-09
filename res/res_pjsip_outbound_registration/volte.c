@@ -1106,9 +1106,9 @@ pj_status_t volte_expires_0(pjsip_tx_data *tdata)
 	return PJ_SUCCESS;
 }
 
-const char *volte_add_contact_params(const char *imei)
+const char *volte_add_contact_params(const char *imei, const char *accesstype)
 {
-	static char contact[256], imei_str[64];
+	static char contact[1024], imei_str[64];
 
 	if (!imei || !imei[0])
 		imei = "000000000000000";
@@ -1118,8 +1118,11 @@ const char *volte_add_contact_params(const char *imei)
 		imei = imei_str;
 	}
 
-	sprintf(contact, "+g.3gpp.icsi-ref=\"urn%%3Aurn-7%%3A3gpp-service.ims.icsi.mmtel\";"
-			 "audio;+sip.instance=\"<urn:gsma:imei:%s>\"", imei);
+	sprintf(contact, "+g.3gpp.icsi-ref=\"urn%%3Aurn-7%%3A3gpp-service.ims.icsi.mmtel\";audio");
+	if (imei[0])
+		sprintf(strchr(contact, '\0'), ";+sip.instance=\"<urn:gsma:imei:%s>\"", imei);
+	if (accesstype[0])
+		sprintf(strchr(contact, '\0'), ";+g.3gpp.accesstype=\"%s\"", accesstype);
 
 	return contact;
 }
