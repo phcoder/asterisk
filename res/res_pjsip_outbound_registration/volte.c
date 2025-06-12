@@ -411,7 +411,7 @@ static pj_status_t add_value_array_hdr(pjsip_tx_data *tdata, const pj_str_t *nam
 }
 
 /* Add security client header to SIP message. */
-static pj_status_t add_securety_client_hdr(pjsip_tx_data *tdata, const struct ipsec_alg alg[],
+static pj_status_t add_security_client_hdr(pjsip_tx_data *tdata, const struct ipsec_alg alg[],
 					   const struct ipsec_alg ealg[], uint32_t spi_c, uint32_t spi_s,
 					   uint16_t port_c, uint16_t port_s)
 {
@@ -435,8 +435,8 @@ static pj_status_t add_securety_client_hdr(pjsip_tx_data *tdata, const struct ip
 	/* Create tupple for given algorithms. */
 	for (i = 0; alg[i].sip_name; i++) {
 		for (j = 0; ealg[j].sip_name; j++) {
-			snprintf(str, sizeof(str), "ipsec-3gpp; alg=%s; ealg=%s; spi-c=%u; spi-s=%u; "
-				 "port-c=%u; port-s=%u", alg[i].sip_name, ealg[j].sip_name, spi_c, spi_s,
+			snprintf(str, sizeof(str), "ipsec-3gpp;alg=%s;ealg=%s;spi-c=%u;spi-s=%u;"
+				 "port-c=%u;port-s=%u", alg[i].sip_name, ealg[j].sip_name, spi_c, spi_s,
 				 port_c, port_s);
 			if (hdr->count == PJSIP_GENERIC_ARRAY_MAX_COUNT) {
 				ast_log(LOG_ERROR, "Too many evalue in array, skipping '%s'.", str);
@@ -593,7 +593,7 @@ pj_status_t volte_add_security_client(struct ast_sip_transport_state *transport_
 	local_port_c = pj_sockaddr_get_port(&transport_state->volte.local_addr_c);
 	local_port_s = pj_sockaddr_get_port(&transport_state->volte.local_addr_s);
 
-	status = add_securety_client_hdr(tdata, g_ipsec_alg, g_ipsec_ealg, transport_state->volte.local_spi_c,
+	status = add_security_client_hdr(tdata, g_ipsec_alg, g_ipsec_ealg, transport_state->volte.local_spi_c,
 					 transport_state->volte.local_spi_s, local_port_c, local_port_s);
 	if (status)
 		return status;
@@ -714,7 +714,7 @@ pj_status_t volte_get_security_server(struct ast_sip_transport_state *transport_
 	for (;;) {
 		pj_str_t name, value;
 
-		pjsip_parse_param_imp(&scanner, rdata->tp_info.pool, &name, &value, 0);
+		pjsip_parse_param_imp(&scanner, rdata->tp_info.pool, &name, &value, 1);
 
 		if (!pj_stricmp(&name, &STR_Q)) {
 			secs[idx].q = pj_strtof(&value);
