@@ -244,7 +244,7 @@ pj_status_t volte_add_p_early_media_supported(pjsip_tx_data *tdata)
 	return PJ_SUCCESS;
 }
 
-void volte_add_contact_params(pjsip_tx_data *tdata, const char **params)
+void volte_add_contact_params(pjsip_tx_data *tdata, const char *contact_user, const char **params)
 {
 	pjsip_contact_hdr *contact;
 	pjsip_sip_uri *uri;
@@ -259,8 +259,12 @@ void volte_add_contact_params(pjsip_tx_data *tdata, const char **params)
 
 	uri = pjsip_uri_get_uri(contact->uri);
 	if (uri) {
-		ast_pbx_uuid_get(uuid_buf, sizeof(uuid_buf));
-		pj_strdup2(tdata->pool, &uri->user, uuid_buf);
+		if (contact_user && contact_user[0]) {
+			pj_strdup2(tdata->pool, &uri->user, contact_user);
+		} else {
+			ast_pbx_uuid_get(uuid_buf, sizeof(uuid_buf));
+			pj_strdup2(tdata->pool, &uri->user, uuid_buf);
+		}
 	}
 
 	while (*params) {

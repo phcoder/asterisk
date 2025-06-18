@@ -2665,7 +2665,7 @@ static int sip_outbound_registration_regc_alloc(void *data)
 
 	if (registration->volte) {
 		ast_pbx_uuid_get(uuid_buf, sizeof(uuid_buf));
-		contact_user = uuid_buf;
+		contact_user = S_OR(registration->contact_user, uuid_buf);
 		contact_header_params = volte_add_contact_params(registration->imei, registration->accesstype);
 	} else {
 		contact_user = S_OR(registration->contact_user, "s");

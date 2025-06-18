@@ -4631,8 +4631,9 @@ static pj_status_t session_on_tx_request(pjsip_tx_data *tdata)
 			}
 
 			/* Add parameters to Contact header. */
-			volte_add_contact_params(tdata, (first_invite) ? volte_invite_contact_params :
-									 volte_other_contact_params);
+			volte_add_contact_params(tdata, session->endpoint->contact_user,
+						 (first_invite) ? volte_invite_contact_params :
+								  volte_other_contact_params);
 		}
 		if (!pj_strcmp2(&tdata->msg->line.req.method.name, "UPDATE")) {
 			/* Add Require: precondition */
@@ -4640,7 +4641,8 @@ static pj_status_t session_on_tx_request(pjsip_tx_data *tdata)
 				ast_log(LOG_ERROR, "Failed to add precondition header.\n");
 			}
 			/* Add parameters to Contact header. */
-			volte_add_contact_params(tdata, volte_other_contact_params);
+			volte_add_contact_params(tdata, session->endpoint->contact_user,
+						 volte_other_contact_params);
 		}
 
 		ao2_unlock(transport_state);
@@ -5055,7 +5057,7 @@ static void handle_outgoing_response(struct ast_sip_session *session, pjsip_tx_d
 		/* Add parameters to Contact header. */
 		if (!pj_strcmp2(&cseq->method.name, "INVITE")
 		 || !pj_strcmp2(&cseq->method.name, "UPDATE")) {
-			volte_add_contact_params(tdata, volte_other_contact_params);
+			volte_add_contact_params(tdata, session->endpoint->contact_user, volte_other_contact_params);
 		}
 
 		/* Add "precondition" to Require header. */
