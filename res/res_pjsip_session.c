@@ -4923,6 +4923,14 @@ static void handle_incoming_response(struct ast_sip_session *session, pjsip_rx_d
 		}
 	}
 
+	/* VoLTE: Do not forward 183 responses during SDP/QoS negotiation.
+	 * A 183 response with no SDP will indicate early audio. This one is forwarded. */
+	if (session->endpoint && session->endpoint->volte && status.code == 183) {
+		sdp_info = pjsip_rdata_get_sdp_info(rdata);
+		if (sdp_info && sdp_info->sdp)
+			goto out;
+	}
+
 	/* Handle "200 OK" (UPDATE) during precondition. */
 	if (session->endpoint && session->endpoint->volte && status.code == 200 && !pj_strcmp2(&rdata->msg_info.cseq->method.name, "UPDATE")) {
 		sdp_info = pjsip_rdata_get_sdp_info(rdata);
@@ -4950,6 +4958,7 @@ static void handle_incoming_response(struct ast_sip_session *session, pjsip_rx_d
 		}
 	}
 
+out:
 	SCOPE_EXIT("%s\n", ast_sip_session_get_name(session));
 }
 
