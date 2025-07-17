@@ -1756,9 +1756,13 @@ static pj_status_t set_from_header(struct ast_sip_session *session, const char *
 		}
 		dlg_info_uri->user.ptr = NULL;
 		dlg_info_uri->user.slen = 0;
-		pj_strdup2(dlg_pool, &dlg_info_uri->host, from_uri + 4);
-		/* IMS does not restrict the From header. */
-		restricted = 0;
+		/* Apply restriction according to 3GPP TS 24.607 Clause 4.5.2.1. */
+		if (restricted) {
+			pj_strdup2(dlg_pool, &dlg_info_uri->host, "anonymous@anonymous.invalid");
+			restricted = 0;
+		} else {
+			pj_strdup2(dlg_pool, &dlg_info_uri->host, from_uri + 4);
+		}
 	} else {
 		if (!ast_strlen_zero(session->endpoint->fromuser)) {
 			dlg_info_name_addr->display.ptr = NULL;
