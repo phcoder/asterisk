@@ -1309,17 +1309,8 @@ static void update_client_state_status(struct sip_outbound_registration_client_s
 static int handle_client_state_destruction(void *data)
 {
 	struct sip_outbound_registration_client_state *client_state = data;
-	struct ast_sip_transport_state *transport_state = NULL;
 
 	cancel_registration(client_state);
-
-	if (!get_endpoint_transport_transport_state(client_state, NULL, NULL, &transport_state)) {
-		ao2_lock(transport_state);
-		/* Cleanup IPSec translation. */
-		volte_cleanup_xfrm(transport_state);
-		ao2_unlock(transport_state);
-		ao2_cleanup(transport_state);
-	}
 
 	if (client_state->client) {
 		pjsip_regc_info info;
@@ -2237,11 +2228,22 @@ static void sip_outbound_registration_response_cb(struct pjsip_regc_cbparam *par
 static void sip_outbound_registration_state_destroy(void *obj)
 {
 	struct sip_outbound_registration_state *state = obj;
+	struct ast_sip_transport_state *transport_state = NULL;
 
 	ast_debug(3, "Destroying registration state for registration to server '%s' from client '%s'\n",
 		state->registration ? state->registration->server_uri : "",
 		state->registration ? state->registration->client_uri : "");
 	ao2_cleanup(state->registration);
+
+	/* Reset transport. It will also clean up the IPSec policies/associations */
+	if (state->client_state->volte && state->client_state->transport_name &&
+            (transport_state = ast_sip_get_transport_state(state->client_state->transport_name))) {
+		ao2_lock(transport_state);
+		/* Cleanup IPSec translation. */
+		volte_cleanup_xfrm(transport_state);
+		ao2_unlock(transport_state);
+		ao2_cleanup(transport_state);
+	}
 
 	if (state->client_state || state->client_state->challenge) {
 		pjsip_rx_data_free_cloned(state->client_state->challenge);
