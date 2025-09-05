@@ -755,15 +755,20 @@ pj_status_t volte_update_sdp_qos(struct ast_sip_session_qos_status *local_status
 
 pj_bool_t volte_is_supported_precondition(pjsip_rx_data *rdata)
 {
-	pjsip_supported_hdr *sup_hdr = pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_SUPPORTED, NULL);
+	pjsip_supported_hdr *sup_hdr = NULL;
 	int i;
 
-	if (!sup_hdr)
-		return PJ_FALSE;
+	/* Search for first header, then for the next header for "Supported". */
+	while ((sup_hdr = pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_SUPPORTED,
+					     (sup_hdr) ? sup_hdr->next : NULL))) {
+		for (i = 0; i < sup_hdr->count; i++) {
+			if (!pj_stricmp2(&sup_hdr->values[i], "precondition"))
+				return PJ_TRUE;
+		}
 
-	for (i = 0; i < sup_hdr->count; i++) {
-		if (!pj_stricmp2(&sup_hdr->values[i], "precondition"))
-			return PJ_TRUE;
+		/* Stop, if there is no next header. Else this could be en endless loop. */
+		if (!sup_hdr->next)
+			break;
 	}
 
 	return PJ_FALSE;
