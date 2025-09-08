@@ -5748,7 +5748,9 @@ static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, stru
 				if (!volte_parse_sdp_qos(offer->media[streams], &remote_status)) {
 					volte_negotiate_sdp_qos(&session->qos_status[streams], &remote_status,
 								"Offer received");
-					volte_confirm_sdp_qos(&session->qos_status[streams]);
+					/* We confirm QoS once during INVITE, not again during UPDATE. */
+					if (session->precondition_state != AST_SIP_SESSION_PRECONDITION_MT_WAIT_UPDATE)
+						volte_confirm_sdp_qos(&session->qos_status[streams]);
 				}
 			}
 			if (session->endpoint->bw_value)
