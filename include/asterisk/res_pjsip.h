@@ -1048,6 +1048,8 @@ struct ast_sip_endpoint {
 		AST_STRING_FIELD(incoming_mwi_mailbox);
 		/*! STIR/SHAKEN profile to use */
 		AST_STRING_FIELD(stir_shaken_profile);
+		/*! \brief IMEI for VoLTE calls */
+		AST_STRING_FIELD(imei);
 	);
 	/*! Configuration for extensions */
 	struct ast_sip_endpoint_extensions extensions;

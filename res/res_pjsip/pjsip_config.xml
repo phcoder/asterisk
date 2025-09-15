@@ -1539,6 +1539,9 @@
 				<configOption name="hack_evs">
 					<synopsis>VoLTE: Internal debugging feature.</synopsis>
 				</configOption>
+				<configOption name="imei">
+					<synopsis>VoLTE: Set IMEI in contact header for INVITE, if given.</synopsis>
+				</configOption>
 			</configObject>
 			<configObject name="auth">
 				<synopsis>Authentication type</synopsis>

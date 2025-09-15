@@ -2303,6 +2303,7 @@ int ast_res_pjsip_initialize_configuration(void)
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "dedicated_bearer_up_delayms", "500", OPT_UINT_T, 0, FLDSET(struct ast_sip_endpoint, dedicated_bearer_up_delayms));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "bw_value", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_endpoint, bw_value));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "hack_evs", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, hack_evs));
+	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "imei", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, imei));
 
 	if (ast_sip_initialize_sorcery_transport()) {
 		ast_log(LOG_ERROR, "Failed to register SIP transport support with sorcery\n");

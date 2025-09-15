@@ -4629,9 +4629,18 @@ static pj_status_t session_on_tx_request(pjsip_tx_data *tdata)
 			}
 
 			/* Add parameters to Contact header. */
-			volte_add_contact_params(tdata, session->endpoint->contact_user,
+			volte_add_contact_params(tdata, PJ_TRUE, session->endpoint->contact_user,
 						 (first_invite) ? volte_invite_contact_params :
 								  volte_other_contact_params);
+			if (session->endpoint->imei[0]) {
+				char value[32 + strlen(session->endpoint->imei)];
+				pj_str_t str;
+				const char *params[] = { "+sip.instance", NULL, NULL };
+				snprintf(value, sizeof(value), "\"<urn:gsma:imei:%s>\"", session->endpoint->imei);
+				pj_strdup2_with_null(tdata->pool, &str, value);
+				params[1] = str.ptr;
+				volte_add_contact_params(tdata, PJ_FALSE, NULL, params);
+			}
 		}
 		if (!pj_strcmp2(&tdata->msg->line.req.method.name, "UPDATE")) {
 			/* Add Require: precondition */
@@ -4639,7 +4648,7 @@ static pj_status_t session_on_tx_request(pjsip_tx_data *tdata)
 				ast_log(LOG_ERROR, "Failed to add precondition header.\n");
 			}
 			/* Add parameters to Contact header. */
-			volte_add_contact_params(tdata, session->endpoint->contact_user,
+			volte_add_contact_params(tdata, PJ_TRUE, session->endpoint->contact_user,
 						 volte_other_contact_params);
 		}
 
@@ -5064,7 +5073,7 @@ static void handle_outgoing_response(struct ast_sip_session *session, pjsip_tx_d
 		/* Add parameters to Contact header. */
 		if (!pj_strcmp2(&cseq->method.name, "INVITE")
 		 || !pj_strcmp2(&cseq->method.name, "UPDATE")) {
-			volte_add_contact_params(tdata, session->endpoint->contact_user, volte_other_contact_params);
+			volte_add_contact_params(tdata, PJ_TRUE, session->endpoint->contact_user, volte_other_contact_params);
 		}
 
 		/* Add "precondition" to Require header. */
