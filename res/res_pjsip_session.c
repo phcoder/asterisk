@@ -6031,12 +6031,12 @@ static void session_inv_on_media_update(pjsip_inv_session *inv, pj_status_t stat
 		}
 	}
 
+	/* Do not end the call if media becomes inactive. Media may be activated again when available. */
 	if ((status != PJ_SUCCESS) || (pjmedia_sdp_neg_get_active_local(inv->neg, &local) != PJ_SUCCESS) ||
 		(pjmedia_sdp_neg_get_active_remote(inv->neg, &remote) != PJ_SUCCESS)) {
-		ast_channel_hangupcause_set(session->channel, AST_CAUSE_BEARERCAPABILITY_NOTAVAIL);
-		ast_set_hangupsource(session->channel, ast_channel_name(session->channel), 0);
-		ast_queue_hangup(session->channel);
-		SCOPE_EXIT_RTN("%s: Couldn't get active or local or remote negotiator.  Hanging up\n", ast_sip_session_get_name(session));
+		ast_sip_session_media_state_reset(session->pending_media_state);
+		SCOPE_EXIT_RTN("%s: Couldn't get active or local or remote negotiator.  Resetting pending media state\n",
+			       ast_sip_session_get_name(session));
 	}
 
 	if (handle_negotiated_sdp(session, local, remote)) {
