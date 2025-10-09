@@ -281,6 +281,8 @@ struct ast_sip_session {
 	int ani2;
 	/*! Current precondition state for this session */
 	enum ast_sip_session_precondition precondition_state;
+	/*! Flag that states if precondition process is required or not */
+	pj_bool_t precondition_required;
 	/*! Time to wait for precondition to be up, if set automatically */
 	pj_timer_entry precondition_timer;
 	/*! Flag that state if the dedicated bearer for this call is up or down */

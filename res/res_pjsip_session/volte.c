@@ -177,45 +177,50 @@ pj_status_t volte_add_p_preferred_service(pjsip_tx_data *tdata, char *info)
 	return PJ_SUCCESS;
 }
 
-pj_status_t volte_add_precondition(pjsip_tx_data *tdata, pj_bool_t supported)
+pj_status_t volte_add_supported_precondition(pjsip_tx_data *tdata)
 {
 	pj_bool_t created = PJ_FALSE;
-	pj_status_t status;
+	pj_status_t status = PJ_SUCCESS;
 
-	status = PJ_SUCCESS;
-	if (supported) {
-		/* "Supported: precondition" */
-		pjsip_supported_hdr *hdr;
-		hdr = pjsip_msg_find_hdr_by_name(tdata->msg, &STR_SUPPORTED_HDR, NULL);
-		if (!hdr) {
-			hdr = pjsip_supported_hdr_create(tdata->pool);
-			if (hdr)
-				created = PJ_TRUE;
-			else
-				status = PJ_ENOMEM;
-		}
-		if (hdr) {
-			hdr->values[hdr->count++] = STR_PRECONDITION;
-		}
-		if (created)
-			pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)hdr);
-	} else {
-		/* "Require: precondition" */
-		pjsip_require_hdr *hdr;
-		hdr = pjsip_msg_find_hdr_by_name(tdata->msg, &STR_REQUIRE, NULL);
-		if (!hdr) {
-			hdr = pjsip_require_hdr_create(tdata->pool);
-			if (hdr)
-				created = PJ_TRUE;
-			else
-				status = PJ_ENOMEM;
-		}
-		if (hdr) {
-			hdr->values[hdr->count++] = STR_PRECONDITION;
-		}
-		if (created)
-			pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)hdr);
+	/* "Supported: precondition" */
+	pjsip_supported_hdr *hdr;
+	hdr = pjsip_msg_find_hdr_by_name(tdata->msg, &STR_SUPPORTED_HDR, NULL);
+	if (!hdr) {
+		hdr = pjsip_supported_hdr_create(tdata->pool);
+		if (hdr)
+			created = PJ_TRUE;
+		else
+			status = PJ_ENOMEM;
 	}
+	if (hdr) {
+		hdr->values[hdr->count++] = STR_PRECONDITION;
+	}
+	if (created)
+		pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)hdr);
+
+	return status;
+}
+
+pj_status_t volte_add_require_precondition(pjsip_tx_data *tdata)
+{
+	pj_bool_t created = PJ_FALSE;
+	pj_status_t status = PJ_SUCCESS;
+
+	/* "Require: precondition" */
+	pjsip_require_hdr *hdr;
+	hdr = pjsip_msg_find_hdr_by_name(tdata->msg, &STR_REQUIRE, NULL);
+	if (!hdr) {
+		hdr = pjsip_require_hdr_create(tdata->pool);
+		if (hdr)
+			created = PJ_TRUE;
+		else
+			status = PJ_ENOMEM;
+	}
+	if (hdr) {
+		hdr->values[hdr->count++] = STR_PRECONDITION;
+	}
+	if (created)
+		pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)hdr);
 
 	return status;
 }
@@ -755,25 +760,36 @@ pj_status_t volte_update_sdp_qos(struct ast_sip_session_qos_status *local_status
 	return PJ_SUCCESS;
 }
 
+pj_bool_t volte_is_require_precondition(pjsip_rx_data *rdata)
+{
+        int i;
+
+        if (!rdata->msg_info.require)
+                return PJ_FALSE;
+
+        for (i = 0; i < rdata->msg_info.require->count; i++) {
+                if (!pj_stricmp2(&rdata->msg_info.require->values[i], "precondition")) {
+                        return PJ_TRUE;
+                }
+        }
+
+        return PJ_FALSE;
+}
+
 pj_bool_t volte_is_supported_precondition(pjsip_rx_data *rdata)
 {
-	pjsip_supported_hdr *sup_hdr = NULL;
-	int i;
+        int i;
 
-	/* Search for first header, then for the next header for "Supported". */
-	while ((sup_hdr = pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_SUPPORTED,
-					     (sup_hdr) ? sup_hdr->next : NULL))) {
-		for (i = 0; i < sup_hdr->count; i++) {
-			if (!pj_stricmp2(&sup_hdr->values[i], "precondition"))
-				return PJ_TRUE;
-		}
+        if (!rdata->msg_info.supported)
+                return PJ_FALSE;
 
-		/* Stop, if there is no next header. Else this could be en endless loop. */
-		if (!sup_hdr->next)
-			break;
-	}
+        for (i = 0; i < rdata->msg_info.supported->count; i++) {
+                if (!pj_stricmp2(&rdata->msg_info.supported->values[i], "precondition")) {
+                        return PJ_TRUE;
+                }
+        }
 
-	return PJ_FALSE;
+        return PJ_FALSE;
 }
 
 static const pj_str_t STR_BW = DEF_STR("bw=nb-wb");

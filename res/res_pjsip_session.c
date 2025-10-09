@@ -117,6 +117,9 @@
  * AST_SIP_SESSION_PRECONDITION_MT_WAIT_BEARER will wait for UPDATE and
  * enter AST_SIP_SESSION_PRECONDITION_MT_WAIT_UPDATE.
  *
+ *
+ * If precondition is not required (MO) or supported (MT), UPDATE states are
+ * skipped, but waiting for dedicated bearer still applies.
  */
 
 /* Some forward declarations */
@@ -162,7 +165,10 @@ struct sdp_handler_list {
 	char stream_type[1];
 };
 
-static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, struct ast_sip_session *session, const pjmedia_sdp_session *offer, const unsigned int ignore_active_stream_topology, pj_bool_t qos_offer);
+static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, struct ast_sip_session *session,
+						    const pjmedia_sdp_session *offer,
+						    const unsigned int ignore_active_stream_topology,
+						    pj_bool_t qos_offer, pj_bool_t precondition_required);
 
 static int sdp_handler_list_hash(const void *obj, int flags)
 {
@@ -1698,7 +1704,7 @@ static pjmedia_sdp_session *generate_session_refresh_sdp(struct ast_sip_session 
 			pjmedia_sdp_neg_get_active_local(inv_session->neg, &previous_sdp);
 		}
 	}
-	SCOPE_EXIT_RTN_VALUE(create_local_sdp(inv_session, session, previous_sdp, 0, PJ_FALSE));
+	SCOPE_EXIT_RTN_VALUE(create_local_sdp(inv_session, session, previous_sdp, 0, PJ_FALSE, session->precondition_required));
 }
 
 static pj_status_t set_from_header(struct ast_sip_session *session, const char *from_uri)
@@ -2644,7 +2650,7 @@ int ast_sip_session_regenerate_answer(struct ast_sip_session *session,
 		pjmedia_sdp_neg_set_remote_offer(inv_session->pool, inv_session->neg, previous_offer);
 	}
 
-	new_answer = create_local_sdp(inv_session, session, previous_offer, 0, PJ_FALSE);
+	new_answer = create_local_sdp(inv_session, session, previous_offer, 0, PJ_FALSE, session->precondition_required);
 	if (!new_answer) {
 		ast_log(LOG_WARNING, "Could not create a new local SDP answer for channel '%s'\n",
 			ast_channel_name(session->channel));
@@ -2982,7 +2988,7 @@ int ast_sip_session_create_invite(struct ast_sip_session *session, pjsip_tx_data
 
 	SCOPE_ENTER(1, "%s\n", ast_sip_session_get_name(session));
 
-	if (!(offer = create_local_sdp(session->inv_session, session, NULL, 0, PJ_FALSE))) {
+	if (!(offer = create_local_sdp(session->inv_session, session, NULL, 0, PJ_FALSE, PJ_TRUE))) {
 		pjsip_inv_terminate(session->inv_session, 500, PJ_FALSE);
 		SCOPE_EXIT_RTN_VALUE(-1, "Couldn't create offer\n");
 	}
@@ -3081,9 +3087,17 @@ static int session_precondition_timeout(void *data)
 
 	ast_debug(1, "%s: Precondition timer fired.\n", ast_sip_session_get_name(session));
 	if (session->precondition_state == AST_SIP_SESSION_PRECONDITION_MO_WAIT_BEARER) {
-		ast_debug(1, "%s: Precondition state is send UPDATE to complete.\n",
-			  ast_sip_session_get_name(session));
-		session_precondition_send_update(session);
+		if (session->precondition_required) {
+			/* Send UPDATE, because precondition timer timed out. */
+			ast_debug(1, "%s: Precondition state is send UPDATE to complete.\n",
+				  ast_sip_session_get_name(session));
+			session_precondition_send_update(session);
+		} else {
+			/* Use the MO_COMPLETE state to skip UPDATE procedure. */
+			ast_debug(1, "%s: Precondition state is complete.\n",
+				  ast_sip_session_get_name(session));
+			session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_COMPLETE;
+		}
 	}
 
 	ao2_ref(session, -1);
@@ -4277,12 +4291,10 @@ static int new_invite(struct new_invite *invite)
 		invite->session->exten);
 	ast_sip_session_send_response(invite->session, tdata);
 
-	/* Setting state to "MT_COMPLETE", so that SDP is not generated with QOS attributes. */
-	if (!volte_is_supported_precondition(invite->rdata)) {
-		ast_debug(1, "%s: Precondition is not supported for MT call.\n",
-			  ast_sip_session_get_name(invite->session));
-		invite->session->precondition_state = AST_SIP_SESSION_PRECONDITION_MT_COMPLETE;
-	}
+	/* Regarding TS 24.299 Clause B.3.1.4, preconditon is to be performed, if supported or required. */
+	invite->session->precondition_required = volte_is_require_precondition(invite->rdata);
+	if (!invite->session->precondition_required)
+		invite->session->precondition_required = volte_is_supported_precondition(invite->rdata);
 
 	sdp_info = pjsip_rdata_get_sdp_info(invite->rdata);
 	if (sdp_info && (sdp_info->sdp_err == PJ_SUCCESS) && sdp_info->sdp) {
@@ -4295,10 +4307,12 @@ static int new_invite(struct new_invite *invite)
 			goto end;
 		}
 		/* We are creating a local SDP which is an answer to their offer */
-		local = create_local_sdp(invite->session->inv_session, invite->session, sdp_info->sdp, 0, PJ_TRUE);
+		local = create_local_sdp(invite->session->inv_session, invite->session, sdp_info->sdp, 0, PJ_TRUE,
+					 invite->session->precondition_required);
 	} else {
 		/* We are creating a local SDP which is an offer */
-		local = create_local_sdp(invite->session->inv_session, invite->session, NULL, 0, PJ_FALSE);
+		local = create_local_sdp(invite->session->inv_session, invite->session, NULL, 0, PJ_FALSE,
+					 invite->session->precondition_required);
 	}
 
 	/* If we were unable to create a local SDP terminate the session early, it won't go anywhere */
@@ -4326,13 +4340,28 @@ static int new_invite(struct new_invite *invite)
 		int i;
 
 		if (pjsip_inv_answer(invite->session->inv_session, 183, NULL, NULL, &packet) == PJ_SUCCESS)
-	                ast_sip_session_send_response(invite->session, packet);
-		ast_debug(1, "%s: Precondition state is waiting for UPDATE to complete.\n",
-			  ast_sip_session_get_name(invite->session));
-		for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
-			volte_update_sdp_qos(&invite->session->qos_status[i]);
+			ast_sip_session_send_response(invite->session, packet);
+		if (invite->session->precondition_required) {
+			for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
+				volte_update_sdp_qos(&invite->session->qos_status[i]);
+			}
 		}
-		invite->session->precondition_state = AST_SIP_SESSION_PRECONDITION_MT_WAIT_UPDATE;
+		if (invite->session->precondition_required) {
+			/* Precondion required or supported. */
+			ast_debug(1, "%s: Precondition state is waiting for UPDATE to complete.\n",
+				  ast_sip_session_get_name(invite->session));
+			invite->session->precondition_state = AST_SIP_SESSION_PRECONDITION_MT_WAIT_UPDATE;
+		} else if (invite->session->dedicated_bearer_up || invite->session->endpoint->dedicated_bearer_up) {
+			/* Dedicated bearer is already up, so preconditon state is now complete. */
+			ast_debug(1, "%s: Precondition state is complete.\n",
+				  ast_sip_session_get_name(invite->session));
+			invite->session->precondition_state = AST_SIP_SESSION_PRECONDITION_MT_COMPLETE;
+		} else {
+			/* Dedicated bearer is not up yet, so wait for the bearer. */
+			ast_debug(1, "%s: Precondition state is waiting for dedicaed bearer.\n",
+				  ast_sip_session_get_name(invite->session));
+			invite->session->precondition_state = AST_SIP_SESSION_PRECONDITION_MT_WAIT_BEARER;
+		}
 	}
 
 	handle_incoming_request(invite->session, invite->rdata);
@@ -4618,9 +4647,9 @@ static pj_status_t session_on_tx_request(pjsip_tx_data *tdata)
 			/* P-Preferred-Service: GSMA FCM.01 3.2.3.3 */
 			volte_add_p_preferred_service(tdata, "urn:urn-7:3gpp-service.ims.icsi.mmtel");
 
-			/* Add Supported: precondition */
-			if (volte_add_precondition(tdata, PJ_TRUE)) {
-				ast_log(LOG_ERROR, "Failed to add precondition header.\n");
+			/* Add "precondition" to Supported header. */
+			if (volte_add_supported_precondition(tdata)) {
+				ast_log(LOG_ERROR, "Failed to add precondition to 'Supported' header.\n");
 			}
 
 			/* Add P-Early-Media: supported */
@@ -4643,9 +4672,11 @@ static pj_status_t session_on_tx_request(pjsip_tx_data *tdata)
 			}
 		}
 		if (!pj_strcmp2(&tdata->msg->line.req.method.name, "UPDATE")) {
-			/* Add Require: precondition */
-			if (volte_add_precondition(tdata, PJ_FALSE)) {
-				ast_log(LOG_ERROR, "Failed to add precondition header.\n");
+			/* Add "precondition" to Require header. */
+			if (session->precondition_required) {
+				if (volte_add_require_precondition(tdata)) {
+					ast_log(LOG_ERROR, "Failed to add precondition to 'Required' header.\n");
+				}
 			}
 			/* Add parameters to Contact header. */
 			volte_add_contact_params(tdata, PJ_TRUE, session->endpoint->contact_user,
@@ -4895,20 +4926,31 @@ static void handle_incoming_response(struct ast_sip_session *session, pjsip_rx_d
 	/* Handle "Session Progress" during precondition. */
 	if (session->endpoint && session->endpoint->volte && status.code == 183 &&
 	    session->precondition_state == AST_SIP_SESSION_PRECONDITION_MO_WAIT_PROGRESS) {
-		sdp_info = pjsip_rdata_get_sdp_info(rdata);
-		if (sdp_info && sdp_info->sdp) {
-			for (i = 0; i < sdp_info->sdp->media_count; i++) {
-				if (!volte_parse_sdp_qos(sdp_info->sdp->media[i], &remote_status)) {
-					volte_negotiate_sdp_qos(&session->qos_status[i], &remote_status,
-								"183 Session Progress received");
+		session->precondition_required = volte_is_require_precondition(rdata);
+		if (session->precondition_required) {
+			sdp_info = pjsip_rdata_get_sdp_info(rdata);
+			if (sdp_info && sdp_info->sdp) {
+				for (i = 0; i < sdp_info->sdp->media_count; i++) {
+					if (!volte_parse_sdp_qos(sdp_info->sdp->media[i], &remote_status)) {
+						volte_negotiate_sdp_qos(&session->qos_status[i], &remote_status,
+									"183 Session Progress received");
+					}
 				}
 			}
 		}
 		if (session->dedicated_bearer_up) {
 			/* AMI already reported that dedicated bearer is up */
-			ast_debug(1, "%s: Precondition state is waiting for UPDATE to complete.\n",
-				  ast_sip_session_get_name(session));
-			session_precondition_send_update(session);
+			if (session->precondition_required) {
+				/* Send UPDATE now and enter MO_UPDATE state. */
+				ast_debug(1, "%s: Precondition state is waiting for UPDATE to complete.\n",
+					  ast_sip_session_get_name(session));
+				session_precondition_send_update(session);
+			} else {
+				/* Dedicated bearer is up, use the MO_COMPLETE state to skip UPDATE procedure. */
+				ast_debug(1, "%s: Precondition state is complete.\n",
+					  ast_sip_session_get_name(session));
+				session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_COMPLETE;
+			}
 		} else if (session->endpoint->dedicated_bearer_up) {
 			int res;
 			/* Automatically set dedicated bearer to up after given time */
@@ -4932,14 +4974,15 @@ static void handle_incoming_response(struct ast_sip_session *session, pjsip_rx_d
 
 	/* VoLTE: Do not forward 183 responses during SDP/QoS negotiation.
 	 * A 183 response with no SDP will indicate early audio. This one is forwarded. */
-	if (session->endpoint && session->endpoint->volte && status.code == 183) {
-		sdp_info = pjsip_rdata_get_sdp_info(rdata);
-		if (sdp_info && sdp_info->sdp)
-			goto out;
+	if (session->endpoint && session->endpoint->volte && status.code == 183 && session->precondition_required) {
+		ast_debug(1, "%s: Precondition is not required, so forwarding 'Session Progress' toward core.\n",
+			  ast_sip_session_get_name(session));
+		goto out;
 	}
 
 	/* Handle "200 OK" (UPDATE) during precondition. */
-	if (session->endpoint && session->endpoint->volte && status.code == 200 && !pj_strcmp2(&rdata->msg_info.cseq->method.name, "UPDATE")) {
+	if (session->endpoint && session->endpoint->volte && status.code == 200 && session->precondition_required &&
+	    !pj_strcmp2(&rdata->msg_info.cseq->method.name, "UPDATE")) {
 		sdp_info = pjsip_rdata_get_sdp_info(rdata);
 		if (sdp_info && sdp_info->sdp) {
 			for (i = 0; i < sdp_info->sdp->media_count; i++) {
@@ -5062,8 +5105,11 @@ static void handle_outgoing_response(struct ast_sip_session *session, pjsip_tx_d
 			ast_log(LOG_ERROR, "Failed to add P-Access-Network-info header.\n");
 		}
 
-		if (status.code == 183 && volte_add_precondition(tdata, PJ_FALSE)) {
-			ast_log(LOG_ERROR, "Failed to add precondition header.\n");
+		/* Add "precondition" to Require header. */
+		if (status.code == 183 && session->precondition_required) {
+			if (volte_add_require_precondition(tdata)) {
+				ast_log(LOG_ERROR, "Failed to add precondition to 'Required' header.\n");
+			}
 		}
 
 		if (status.code == 183 && volte_add_p_early_media_recvonly(tdata)) {
@@ -5077,9 +5123,9 @@ static void handle_outgoing_response(struct ast_sip_session *session, pjsip_tx_d
 		}
 
 		/* Add "precondition" to Require header. */
-		if (!pj_strcmp2(&cseq->method.name, "UPDATE")) {
-			if (volte_add_precondition(tdata, PJ_FALSE)) {
-				ast_log(LOG_ERROR, "Failed to add precondition header.\n");
+		if (!pj_strcmp2(&cseq->method.name, "UPDATE") && session->precondition_required) {
+			if (volte_add_require_precondition(tdata)) {
+				ast_log(LOG_ERROR, "Failed to add precondition to 'Required' header.\n");
 			}
 		}
 
@@ -5660,7 +5706,10 @@ static int add_bundle_groups(struct ast_sip_session *session, pj_pool_t *pool, p
 	return 0;
 }
 
-static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, struct ast_sip_session *session, const pjmedia_sdp_session *offer, const unsigned int ignore_active_stream_topology, pj_bool_t qos_offer)
+static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, struct ast_sip_session *session,
+						    const pjmedia_sdp_session *offer,
+						    const unsigned int ignore_active_stream_topology,
+						    pj_bool_t qos_offer, pj_bool_t precondition_required)
 {
 	static const pj_str_t STR_IN = { "IN", 2 };
 	static const pj_str_t STR_IP4 = { "IP4", 3 };
@@ -5751,7 +5800,8 @@ static struct pjmedia_sdp_session *create_local_sdp(pjsip_inv_session *inv, stru
 		if (streams != local->media_count &&
 		    session->endpoint->volte &&
 		    session->precondition_state != AST_SIP_SESSION_PRECONDITION_MO_COMPLETE &&
-		    session->precondition_state != AST_SIP_SESSION_PRECONDITION_MT_COMPLETE) {
+		    session->precondition_state != AST_SIP_SESSION_PRECONDITION_MT_COMPLETE &&
+		    precondition_required) {
 			/* On offer, do negotiation and then add QOS attributes. */
 			if (offer && qos_offer) {
 				struct ast_sip_session_qos_status remote_status;
@@ -5871,7 +5921,7 @@ static void session_inv_on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_se
 		SCOPE_EXIT_RTN("%s: handle_incoming_sdp failed\n", ast_sip_session_get_name(session));
 	}
 
-	if ((answer = create_local_sdp(inv, session, offer, 0, PJ_TRUE))) {
+	if ((answer = create_local_sdp(inv, session, offer, 0, PJ_TRUE, session->precondition_required))) {
 		pjsip_inv_set_sdp_answer(inv, answer);
 		SCOPE_EXIT_RTN("%s: Set SDP answer\n", ast_sip_session_get_name(session));
 	}
@@ -5923,9 +5973,9 @@ static void session_inv_on_create_offer(pjsip_inv_session *inv, pjmedia_sdp_sess
 	}
 
 	if (ignore_active_stream_topology) {
-		offer = create_local_sdp(inv, session, NULL, 1, PJ_FALSE);
+		offer = create_local_sdp(inv, session, NULL, 1, PJ_FALSE, session->precondition_required);
 	} else {
-		offer = create_local_sdp(inv, session, previous_sdp, 0, PJ_FALSE);
+		offer = create_local_sdp(inv, session, previous_sdp, 0, PJ_FALSE, session->precondition_required);
 	}
 	if (!offer) {
 		SCOPE_EXIT_RTN("%s: create offer failed\n", ast_sip_session_get_name(session));
@@ -6236,10 +6286,18 @@ static int ami_dedicatedbearerstatus(struct mansession *s, const struct message 
 	switch (session->precondition_state) {
 	case AST_SIP_SESSION_PRECONDITION_MO_WAIT_BEARER:
 		if (session->dedicated_bearer_up) {
-			ast_debug(1, "%s: Precondition state is send UPDATE to complete.\n",
-				  ast_sip_session_get_name(session));
 			cancel_precondition_timer(session);
-			session_precondition_send_update(session);
+			if (session->precondition_required) {
+				/* Send UPDATE, because precondition is required . */
+				ast_debug(1, "%s: Precondition state is send UPDATE to complete.\n",
+					  ast_sip_session_get_name(session));
+				session_precondition_send_update(session);
+			} else {
+				/* Use the MO_COMPLETE state to skip UPDATE procedure. */
+				ast_debug(1, "%s: Precondition state is complete.\n",
+					  ast_sip_session_get_name(session));
+				session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_COMPLETE;
+			}
 		}
 		break;
 	case AST_SIP_SESSION_PRECONDITION_MT_WAIT_BEARER:
