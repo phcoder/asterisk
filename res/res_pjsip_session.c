@@ -4923,6 +4923,31 @@ static void handle_incoming_response(struct ast_sip_session *session, pjsip_rx_d
 	SCOPE_ENTER(3, "%s: Response is %d %.*s\n", ast_sip_session_get_name(session),
 		status.code, (int) pj_strlen(&status.reason), pj_strbuf(&status.reason));
 
+	/* If there is another "Session Progress" message, check if call has been forwarded. (new To tag) */
+	if (session->endpoint && session->endpoint->volte && status.code == 183 &&
+	    session->precondition_state != AST_SIP_SESSION_PRECONDITION_MO_WAIT_PROGRESS) {
+		const pj_str_t *to_tag = &rdata->msg_info.to->tag;
+		/* The tag in the To: header is different, if call has been forwarded. */
+		if (pj_stricmp(&session->inv_session->dlg->remote.info->tag, to_tag)) {
+			ast_debug(1, "%s: 183 Session Progress is a different call: %.*s != %.*s\n",
+				  ast_sip_session_get_name(session),
+				  (int)session->inv_session->dlg->remote.info->tag.slen,
+				  session->inv_session->dlg->remote.info->tag.ptr,
+				  (int)to_tag->slen, to_tag->ptr);
+			/* Store new To tag in invite dialog. (No need to patch PJSip.) */
+			pj_strdup(session->inv_session->dlg->pool, &session->inv_session->dlg->remote.info->tag, to_tag);
+			/* Initialize local QOS state table for each possible media. */
+			for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
+				volte_init_sdp_qos(&session->qos_status[i]);
+			}
+			/* FIXME: Re-init SDP, if there is a change. */
+			/* Reset precondition state. */
+			ast_debug(1, "%s: Precondition state is reset, due to Session Progress from forwarded number.\n",
+				  ast_sip_session_get_name(session));
+			session->precondition_state = AST_SIP_SESSION_PRECONDITION_MO_WAIT_PROGRESS;
+		}
+	}
+
 	/* Handle "Session Progress" during precondition. */
 	if (session->endpoint && session->endpoint->volte && status.code == 183 &&
 	    session->precondition_state == AST_SIP_SESSION_PRECONDITION_MO_WAIT_PROGRESS) {
