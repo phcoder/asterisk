@@ -47,6 +47,8 @@ include $(ASTTOPDIR)/Makefile.moddir_rules
 	echo "<use type=\"module\">res_smdi</use>" >> $@
 	echo "</member>" >> $@
 
+$(call MOD_ADD_C,app_sms,smslib.c)
+
 $(call MOD_ADD_C,app_confbridge,$(wildcard confbridge/*.c))
 
 app_confbridge.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION)
