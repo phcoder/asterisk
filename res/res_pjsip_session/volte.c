@@ -36,7 +36,6 @@ static const pj_str_t STR_P_PREFERRED_SERVICE = DEF_STR("P-Preferred-Service");
 static const pj_str_t STR_PROXY_REQUIRE = DEF_STR("Proxy-Require");
 static const pj_str_t STR_SEC_AGREE = DEF_STR("sec-agree");
 static const pj_str_t STR_P_ACCESS_NETWORK_INFO = DEF_STR("P-Access-Network-Info");
-static const pj_str_t STR_SUPPORTED_HDR = DEF_STR("Supported");
 static const pj_str_t STR_SUPPORTED_VAL = DEF_STR("supported");
 static const pj_str_t STR_PRECONDITION = DEF_STR("precondition");
 static const pj_str_t STR_P_EARLY_MEDIA = DEF_STR("P-Early-Media");
@@ -175,30 +174,6 @@ pj_status_t volte_add_p_preferred_service(pjsip_tx_data *tdata, char *info)
 		return status;
 
 	return PJ_SUCCESS;
-}
-
-pj_status_t volte_add_supported_precondition(pjsip_tx_data *tdata)
-{
-	pj_bool_t created = PJ_FALSE;
-	pj_status_t status = PJ_SUCCESS;
-
-	/* "Supported: precondition" */
-	pjsip_supported_hdr *hdr;
-	hdr = pjsip_msg_find_hdr_by_name(tdata->msg, &STR_SUPPORTED_HDR, NULL);
-	if (!hdr) {
-		hdr = pjsip_supported_hdr_create(tdata->pool);
-		if (hdr)
-			created = PJ_TRUE;
-		else
-			status = PJ_ENOMEM;
-	}
-	if (hdr) {
-		hdr->values[hdr->count++] = STR_PRECONDITION;
-	}
-	if (created)
-		pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)hdr);
-
-	return status;
 }
 
 pj_status_t volte_add_require_precondition(pjsip_tx_data *tdata)
