@@ -1542,6 +1542,9 @@
 				<configOption name="imei">
 					<synopsis>VoLTE: Set IMEI in contact header for INVITE, if given.</synopsis>
 				</configOption>
+				<configOption name="smsc_uri">
+					<synopsis>VoLTE: Set URI for SMS centre. Usually SMSC_NUMBER@ims.mncMNC.mccMCC.3gppnetwork.org</synopsis>
+				</configOption>
 			</configObject>
 			<configObject name="auth">
 				<synopsis>Authentication type</synopsis>

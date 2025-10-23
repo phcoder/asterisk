@@ -1133,7 +1133,7 @@ pj_status_t volte_expires_0(pjsip_tx_data *tdata)
 	return PJ_SUCCESS;
 }
 
-const char *volte_add_contact_params(const char *imei, const char *accesstype)
+const char *volte_add_contact_params(const char *imei, const char *accesstype, pj_bool_t sms_enabled)
 {
 	static char contact[1024], imei_str[64];
 
@@ -1150,6 +1150,8 @@ const char *volte_add_contact_params(const char *imei, const char *accesstype)
 		sprintf(strchr(contact, '\0'), ";+sip.instance=\"<urn:gsma:imei:%s>\"", imei);
 	if (accesstype[0])
 		sprintf(strchr(contact, '\0'), ";+g.3gpp.accesstype=\"%s\"", accesstype);
+	if (sms_enabled)
+		sprintf(strchr(contact, '\0'), ";+g.3gpp.smsip");
 
 	return contact;
 }

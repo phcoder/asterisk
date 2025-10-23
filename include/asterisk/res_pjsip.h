@@ -1055,6 +1055,8 @@ struct ast_sip_endpoint {
 		AST_STRING_FIELD(stir_shaken_profile);
 		/*! \brief IMEI for VoLTE calls */
 		AST_STRING_FIELD(imei);
+		/*! \brief SMSC for VoLTE outbound messages */
+		AST_STRING_FIELD(smsc_uri);
 	);
 	/*! Configuration for extensions */
 	struct ast_sip_endpoint_extensions extensions;
