@@ -6897,6 +6897,7 @@ AST_TEST_DEFINE(test_resolve_refresh_media_states)
 static int load_module(void)
 {
 	pjsip_endpoint *endpt;
+	const pj_str_t str_precondition = { "precondition", 12 };
 
 	if (!ast_sip_get_sorcery() || !ast_sip_get_pjsip_endpoint()) {
 		return AST_MODULE_LOAD_DECLINE;
@@ -6929,6 +6930,8 @@ static int load_module(void)
 #ifdef TEST_FRAMEWORK
 	AST_TEST_REGISTER(test_resolve_refresh_media_states);
 #endif
+	pjsip_endpt_add_capability(ast_sip_get_pjsip_endpoint(), NULL, PJSIP_H_SUPPORTED, NULL, 1, &str_precondition);
+
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
