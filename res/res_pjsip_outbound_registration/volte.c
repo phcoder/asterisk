@@ -1147,6 +1147,7 @@ const char *volte_add_contact_params(const char *imei, const char *accesstype)
 		sprintf(strchr(contact, '\0'), ";+sip.instance=\"<urn:gsma:imei:%s>\"", imei);
 	if (accesstype[0])
 		sprintf(strchr(contact, '\0'), ";+g.3gpp.accesstype=\"%s\"", accesstype);
+	sprintf(strchr(contact, '\0'), ";+g.3gpp.smsip");
 
 	return contact;
 }

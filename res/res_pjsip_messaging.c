@@ -130,6 +130,8 @@
 #include "asterisk/taskprocessor.h"
 #include "asterisk/test.h"
 #include "asterisk/uri.h"
+#include "asterisk/file.h"
+#include "../apps/smslib.h"
 
 const pjsip_method pjsip_message_method = {PJSIP_OTHER_METHOD, {"MESSAGE", 7} };
 
@@ -148,19 +150,24 @@ static struct ast_taskprocessor *message_serializer;
  *
  * \param rdata The SIP request
  */
-static enum pjsip_status_code check_content_type(const pjsip_rx_data *rdata)
+static enum pjsip_status_code check_content_type(const pjsip_rx_data *rdata, pj_bool_t *is_sms_out)
 {
-	int res;
+	int is_plain = 0, is_sms = 0;
 	if (rdata->msg_info.msg->body && rdata->msg_info.msg->body->len) {
-		res = ast_sip_is_content_type(
+		is_plain = ast_sip_is_content_type(
 			&rdata->msg_info.msg->body->content_type, "text", "plain");
-	} else {
-		res = rdata->msg_info.ctype &&
-			ast_sip_is_content_type(
-				&rdata->msg_info.ctype->media, "text", "plain");
+		is_sms = ast_sip_is_content_type(
+			&rdata->msg_info.msg->body->content_type, "application", "vnd.3gpp.sms");
+	} else if (rdata->msg_info.ctype) {
+		 is_plain = ast_sip_is_content_type(
+			 &rdata->msg_info.ctype->media, "text", "plain");
+		 is_sms = ast_sip_is_content_type(
+			 &rdata->msg_info.ctype->media, "application", "vnd.3gpp.sms");
 	}
 
-	return res ? PJSIP_SC_OK : PJSIP_SC_UNSUPPORTED_MEDIA_TYPE;
+	*is_sms_out = is_sms;
+
+	return is_plain || is_sms ? PJSIP_SC_OK : PJSIP_SC_UNSUPPORTED_MEDIA_TYPE;
 }
 
 /*!
@@ -365,6 +372,302 @@ static int print_body(pjsip_rx_data *rdata, char *buf, int len)
 	return res;
 }
 
+static char hexdigit(int x)
+{
+	if (x< 10)
+		return x +'0';
+	return (x - 10) +'a';
+}
+
+static void hex_body(char *bufout, unsigned char *buf, int len)
+{
+	unsigned char *ptrin;
+	char *ptrout = bufout;
+
+	for (ptrin = buf; ptrin < buf + 256; ptrin++)
+	{
+		*ptrout++ = hexdigit((*ptrin >> 4) & 0xf);
+		*ptrout++ = hexdigit((*ptrin) & 0xf);
+	}
+	*ptrout++ = 0;
+}
+
+static void
+utf16_to_utf8(unsigned short *in, size_t inlen, char *dest)
+{
+	uint32_t code_high = 0;
+
+	while (inlen--)
+	{
+		uint32_t code = *in++;
+
+		if (code_high)
+		{
+			if (code >= 0xDC00 && code <= 0xDFFF)
+			{
+				/* Surrogate pair.  */
+				code = ((code_high - 0xD800) << 10) + (code - 0xDC00) + 0x10000;
+
+				*dest++ = (code >> 18) | 0xF0;
+				*dest++ = ((code >> 12) & 0x3F) | 0x80;
+				*dest++ = ((code >> 6) & 0x3F) | 0x80;
+				*dest++ = (code & 0x3F) | 0x80;
+			}
+			else
+			{
+				/* Error...  */
+				*dest++ = '?';
+				/* *src may be valid. Don't eat it.  */
+				in--;
+				inlen++;
+			}
+
+			code_high = 0;
+		}
+		else
+		{
+			if (code <= 0x007F)
+				*dest++ = code;
+			else if (code <= 0x07FF)
+			{
+				*dest++ = (code >> 6) | 0xC0;
+				*dest++ = (code & 0x3F) | 0x80;
+	    }
+			else if (code >= 0xD800 && code <= 0xDBFF)
+			{
+				code_high = code;
+				continue;
+			}
+			else if (code >= 0xDC00 && code <= 0xDFFF)
+			{
+				/* Error... */
+				*dest++ = '?';
+			}
+			else
+			{
+				*dest++ = (code >> 12) | 0xE0;
+				*dest++ = ((code >> 6) & 0x3F) | 0x80;
+				*dest++ = (code & 0x3F) | 0x80;
+			}
+		}
+	}
+
+	*dest = '\0';
+}
+
+static void parse_tpdu(struct ast_msg *msg, unsigned char *tpdu, int tpdu_len)
+{
+	if (tpdu_len < 2)
+	{
+		return;
+	}
+	if (tpdu[0] & 3)
+	{
+		ast_log(LOG_WARNING, "Unhandled PDU type %x\n", tpdu[0] & 3);
+		return;
+	}
+	/*int srr = ((tpdu[0] & 0x20) ? 1 : 0);*/
+	int udhi = ((tpdu[0] & 0x40) ? 1 : 0);
+	/*int rp = ((tpdu[0] & 0x80) ? 1 : 0);*/
+	int p = 1;
+	char oa[300];
+	p += unpackaddress(oa, tpdu + p);
+	if (p + 9 > tpdu_len)
+		return;
+	/*int pid = tpdu[p++] */p++;
+	int dcs = tpdu[p++];
+	struct timeval scts = unpackdate(tpdu + p);
+	p += 7;
+	unsigned short ud[300];
+	unsigned char udh[300];
+	int udhl, udl;
+	p += unpacksms(dcs, tpdu + p, udh, &udhl, ud, &udl, udhi);
+	ud[udl] = 0;
+
+	char buf2[300 * 4 + 5];
+	utf16_to_utf8(ud, udl, buf2);
+	ast_log(LOG_DEBUG, "SMS UD='%s' OA='%s'.\n", buf2, oa);
+
+	/* TODO: udh, scts */
+	char buf_scts[30];
+	snprintf(buf_scts, sizeof(buf_scts), "%lld", (long long) scts.tv_sec);
+	ast_msg_set_var(msg, "SMS_SMSC_TIMESTAMP", buf_scts);
+	ast_msg_set_from(msg, "%s", oa);
+	ast_msg_set_body(msg, "%s", buf2);
+}
+
+#define DEF_STR(str) { str, sizeof(str) - 1 }
+
+static const pj_str_t STR_IN_REPLY_TO = DEF_STR("In-Reply-To");
+
+static pj_status_t add_value_string_hdr(pjsip_tx_data *tdata, const pj_str_t *name, const pj_str_t *value)
+{
+	pjsip_generic_string_hdr *hdr;
+
+	/* Add header. */
+	hdr = pjsip_generic_string_hdr_create(tdata->pool, name, value);
+	if (!hdr) {
+		ast_log(LOG_ERROR, "Failed to create string header.");
+		return -ENOMEM;
+	}
+
+	/* Append header */
+	pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr *)hdr);
+
+	return PJ_SUCCESS;
+}
+
+static pj_status_t send_rpack(pjsip_rx_data *rdata, unsigned char ack_ref)
+{
+	pj_status_t status;
+	char buf[7];
+	char addr_buf[512];
+	buf[0] = 2; /* RPACK mobile-to-network.  */
+	buf[1] = ack_ref;
+	buf[2] = 0x41;
+	buf[3] = 0x02;
+	buf[4] = 0x00;
+	buf[5] = 0x00;
+
+	struct ast_sip_endpoint *endpoint = ast_pjsip_rdata_get_endpoint(rdata);
+
+	ast_assert(endpoint != NULL);
+	pjsip_tx_data *tdata;
+
+	struct ast_sip_transport_state *transport_state = ast_sip_get_transport_state(endpoint->transport);
+	if (!transport_state) {
+		ast_log(LOG_ERROR, "Failed to get transport state\n");
+		return PJ_ENOMEM;
+	}
+
+	ssize_t size = pjsip_uri_print(PJSIP_URI_IN_FROMTO_HDR, (pjsip_name_addr *)rdata->msg_info.from->uri, addr_buf, sizeof(addr_buf) - 1);
+	if (size <= 0 || size >= sizeof(addr_buf)) {
+		return PJ_ENOMEM;
+	}
+	addr_buf[size] = '\0';
+
+	status = ast_sip_create_request("MESSAGE", NULL, endpoint, addr_buf, NULL, &tdata);
+	if (status) {
+		ast_log(LOG_WARNING, "PJSIP MESSAGE - Could not create request\n");
+		return status;
+	}
+
+	ast_sip_update_to_uri(tdata, addr_buf);
+
+	ao2_lock(transport_state);
+
+	if (transport_state->service_routes) {
+		int idx;
+
+		for (idx = 0; idx < AST_VECTOR_SIZE(transport_state->service_routes); ++idx) {
+			char *service_route = AST_VECTOR_GET(transport_state->service_routes, idx);
+
+			ast_sip_add_header(tdata, "Route", service_route);
+		}
+	}
+
+	ast_sip_add_header(tdata, "Security-Verify", transport_state->volte.security_server);
+
+	if (transport_state->volte.p_access_network_info[0]) {
+		ast_sip_add_header(tdata, "P-Access-Network-Info", transport_state->volte.p_access_network_info);
+	}
+
+	ao2_unlock(transport_state);
+
+	ast_sip_add_header(tdata, "Require", "sec-agree");
+	ast_sip_add_header(tdata, "Proxy-Require", "sec-agree");
+	ast_sip_add_header(tdata, "Supported", "path, sec-agree");
+	if (endpoint->fromuser && endpoint->fromdomain)
+	{
+		char p_preferred_identity[512];
+		snprintf(p_preferred_identity, sizeof(p_preferred_identity), "<sip:%s@%s>", endpoint->fromuser, endpoint->fromdomain);
+		ast_sip_add_header(tdata, "P-Preferred-Identity", p_preferred_identity);
+	}
+
+	pjsip_cid_hdr *call_id_hdr = (pjsip_cid_hdr*) pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_CALL_ID, NULL);
+	if (call_id_hdr) {
+		status = add_value_string_hdr(tdata, &STR_IN_REPLY_TO, &call_id_hdr->id);
+		if (status)
+			return status;
+	}
+
+	ast_sip_add_header(tdata, "Accept-Contact", "*;+g.3gpp.smsip");
+	ast_sip_add_header(tdata, "Allow", "MESSAGE");
+	ast_sip_add_header(tdata, "Request-Disposition", "no-fork");
+
+	struct ast_sip_body body = {
+		.type = "application",
+		.subtype = "vnd.3gpp.sms",
+		.body_text = buf
+	};
+
+	status = ast_sip_add_binary_body(tdata, &body, 6);
+	if (status) {
+		pjsip_tx_data_dec_ref(tdata);
+		ast_log(LOG_ERROR, "PJSIP MESSAGE - Could not add body to request\n");
+		return status;
+	}
+
+	status = ast_sip_send_request(tdata, NULL, endpoint, NULL, NULL);
+	if (status) {
+		ast_log(LOG_ERROR, "PJSIP MESSAGE - Could not send request\n");
+		return status;
+	}
+
+	return PJ_SUCCESS;
+}
+
+static void parse_rpdata(pjsip_rx_data *rdata, struct ast_msg *msg, int *ack_ref)
+{
+	if (!rdata->msg_info.msg->body || !rdata->msg_info.msg->body->len) {
+		ast_log(LOG_DEBUG, "No data\n");
+		return;
+	}
+	unsigned char buf[300];
+	int len = rdata->msg_info.msg->body->print_body(
+		rdata->msg_info.msg->body, (char *)buf, sizeof(buf));
+
+	if (len < 3) {
+		ast_log(LOG_DEBUG, "MESSAGE RP-DATA is too short or error: %d.\n", len);
+		return;
+	}
+			
+	char buf2[MAX_BODY_SIZE * 2 + 1];
+	hex_body(buf2, buf, len);
+	ast_log(LOG_DEBUG, "SMS RP-DATA '%s'.\n", buf2);
+	switch (buf[0])
+	{
+	case 0x01: {
+		unsigned char *p;
+		/* RP-DATA */
+		*ack_ref = buf[1] & 0xff;
+		int sender_len = buf[2] & 0xff;
+		unsigned char *sender = &buf[3];
+		p = sender + sender_len;
+		ast_log(LOG_DEBUG, "Sender len %d.\n", sender_len);
+			
+		if (p + 3 >= buf+len)
+			return;
+		int dest_len = p[0] & 0xff;
+		ast_log(LOG_DEBUG, "Dest len %d.\n", dest_len);
+		if (dest_len != 0)
+			return;
+
+		int tpdu_len = p[1] & 0xff;
+		if (tpdu_len > len - (p - buf) - 2)
+			tpdu_len = len - (p - buf) - 2;
+		parse_tpdu(msg, p + 2, tpdu_len);
+		return;
+	}
+	case 0x03: /* RP-ACK */
+	case 0x05: /* RP-ERROR */
+	default:
+		ast_log(LOG_WARNING, "Unknown RP-DATA 0x%02x. Dropping message\n", buf[0]);
+		return;
+	}
+}
+
+
 /*!
  * \internal
  * \brief Converts a 'sip:' uri to a 'pjsip:' so it can be found by
@@ -415,7 +718,7 @@ static char *sip_to_pjsip(char *buf, int size, int capacity)
  * \param rdata The SIP request
  * \param msg The asterisk message structure to fill in.
  */
-static enum pjsip_status_code rx_data_to_ast_msg(pjsip_rx_data *rdata, struct ast_msg *msg)
+static enum pjsip_status_code rx_data_to_ast_msg(pjsip_rx_data *rdata, struct ast_msg *msg, pj_bool_t is_sms, int *ack_ref)
 {
 	RAII_VAR(struct ast_sip_endpoint *, endpt, NULL, ao2_cleanup);
 	pjsip_uri *ruri = rdata->msg_info.msg->line.req.uri;
@@ -426,6 +729,8 @@ static enum pjsip_status_code rx_data_to_ast_msg(pjsip_rx_data *rdata, struct as
 	char exten[AST_MAX_EXTENSION];
 	int res = 0;
 	int size;
+
+	*ack_ref = -1;
 
 	if (!ast_sip_is_allowed_uri(ruri)) {
 		return PJSIP_SC_UNSUPPORTED_URI_SCHEME;
@@ -485,7 +790,10 @@ static enum pjsip_status_code rx_data_to_ast_msg(pjsip_rx_data *rdata, struct as
 	}
 	ast_msg_set_var(msg, "PJSIP_TRANSPORT", field);
 
-	if (print_body(rdata, buf, sizeof(buf) - 1) > 0) {
+	ast_log(LOG_DEBUG, "MESSAGE is_sms=%d.\n", is_sms);
+	if (is_sms) {
+		parse_rpdata(rdata, msg, ack_ref);
+	} else if (print_body(rdata, buf, sizeof(buf) - 1) > 0) {
 		res |= ast_msg_set_body(msg, "%s", buf);
 	}
 
@@ -580,6 +888,353 @@ static void update_content_type(pjsip_tx_data *tdata, struct ast_msg *msg, struc
 	}
 }
 
+static pj_bool_t is_uri_phone(const char *uri)
+{
+	int i = 0;
+	if (!uri || uri[0] == '\0') {
+		return PJ_FALSE;
+	}
+
+	if (ast_begins_with(uri, "pjsip:")) {
+		uri += 6;
+	}
+
+	if (uri[0] == '\0') {
+		return PJ_FALSE;
+	}
+
+	pj_pool_t *pool = pjsip_endpt_create_pool(ast_sip_get_pjsip_endpoint(), "Phone numbers", 256, 256);
+	if (!pool) {
+		ast_log(LOG_ERROR, "Could not create pool\n");
+		return PJ_FALSE;
+	}
+
+	pjsip_uri *pjsip_uri = pjsip_parse_uri(pool, (char *)uri, strlen(uri), 0);
+	if (!pjsip_uri) {
+		ast_log(LOG_ERROR, "Could not parse URI '%s'\n", uri);
+		return -1;
+	}
+	pjsip_sip_uri *sip_uri = pjsip_uri_get_uri(pjsip_uri);
+
+	if (!PJSIP_URI_SCHEME_IS_SIP(sip_uri) && !PJSIP_URI_SCHEME_IS_SIPS(sip_uri)) {
+		pjsip_endpt_release_pool(ast_sip_get_pjsip_endpoint(), pool);
+		return PJ_FALSE;
+	}
+
+	if (!pj_strlen(&sip_uri->user)) {
+		pjsip_endpt_release_pool(ast_sip_get_pjsip_endpoint(), pool);
+		return PJ_FALSE;
+	}
+
+	if (pj_strbuf(&sip_uri->user)[0] == '+') {
+		i = 1;
+	}
+
+	/* Test URI user against allowed characters in AST_DIGIT_ANY */
+	for (; i < pj_strlen(&sip_uri->user); i++) {
+		if (!strchr(AST_DIGIT_ANY, pj_strbuf(&sip_uri->user)[i])) {
+			break;
+		}
+	}
+
+	if (i < pj_strlen(&sip_uri->user)) {
+		pjsip_endpt_release_pool(ast_sip_get_pjsip_endpoint(), pool);
+		return PJ_FALSE;
+	}
+
+	pjsip_endpt_release_pool(ast_sip_get_pjsip_endpoint(), pool);
+	return PJ_TRUE;
+}
+
+static int volte_send_rp_data(struct msg_data *mdata, const char *orig_uri, struct ast_sip_endpoint *endpoint, const unsigned char *buf, size_t buflen)
+{
+	pjsip_tx_data *tdata;
+	char uri[512];
+
+	if (ast_sip_create_request("MESSAGE", NULL, endpoint, endpoint->smsc_uri, NULL, &tdata)) {
+		ast_log(LOG_WARNING, "PJSIP MESSAGE - Could not create request\n");
+		return -1;
+	}
+
+	ast_sip_update_to_uri(tdata, uri);
+
+	struct ast_sip_transport_state *transport_state = ast_sip_get_transport_state(endpoint->transport);
+	if (!transport_state) {
+		ast_log(LOG_ERROR, "Failed to get transport state\n");
+		return -1;
+	}
+
+	ao2_lock(transport_state);
+
+	if (transport_state->service_routes) {
+		int idx;
+
+		for (idx = 0; idx < AST_VECTOR_SIZE(transport_state->service_routes); ++idx) {
+			char *service_route = AST_VECTOR_GET(transport_state->service_routes, idx);
+
+			ast_sip_add_header(tdata, "Route", service_route);
+		}
+	}
+
+	ast_sip_add_header(tdata, "Security-Verify", transport_state->volte.security_server);
+
+	if (transport_state->volte.p_access_network_info[0]) {
+		ast_sip_add_header(tdata, "P-Access-Network-Info", transport_state->volte.p_access_network_info);
+	}
+
+	ao2_unlock(transport_state);
+
+	ast_sip_add_header(tdata, "Require", "sec-agree");
+	ast_sip_add_header(tdata, "Proxy-Require", "sec-agree");
+	ast_sip_add_header(tdata, "Supported", "path, sec-agree");
+
+	if (endpoint->fromuser && endpoint->fromdomain)
+	{
+		char from_uri[512];
+		snprintf(from_uri, sizeof(from_uri), "<sip:%s@%s>", endpoint->fromuser, endpoint->fromdomain);
+		ast_sip_add_header(tdata, "P-Preferred-Identity", from_uri);
+	}
+
+	ast_sip_add_header(tdata, "Allow", "MESSAGE");
+	ast_sip_add_header(tdata, "Request-Disposition", "no-fork");
+	ast_sip_add_header(tdata, "Accept-Contact", "*;+g.3gpp.smsip");
+
+	struct ast_sip_body body = {
+		.type = "application",
+		.subtype = "vnd.3gpp.sms",
+		.body_text = (const char*)buf
+	};
+	pj_status_t status;
+
+	status = ast_sip_add_binary_body(tdata, &body, buflen);
+	if (status)
+	{
+		return -1;
+	}
+
+	status = ast_sip_send_request(tdata, NULL, endpoint, NULL, NULL);
+	if (status) {
+		ast_log(LOG_ERROR, "PJSIP MESSAGE - Could not send request\n");
+		return -1;
+	}
+
+	return 0;	
+}
+
+static pj_bool_t is_7bit_compatible(const unsigned short *in, size_t inlen)
+{
+	for (const unsigned short *p = in; p < in + inlen; p++)
+	{
+		int v;
+		for (v = 0; v < 128 && defaultalphabet[v] != *p; v++);
+		if (v < 128)
+			continue;
+		for (v = 0; v < 128 && escapes[v] != *p; v++);
+		if (v == 128)
+			return PJ_FALSE; /* TODO: Use escapes but it complicates splitting */
+	}
+	return PJ_TRUE;
+}
+
+static pj_bool_t is_7bit_escape(unsigned short u)
+{
+	int v;
+	for (v = 0; v < 128 && defaultalphabet[v] != u; v++);
+	return v == 128;
+}
+
+static pj_bool_t is_8bit_compatible(const unsigned short *in, size_t inlen)
+{
+	for (const unsigned short *p = in; p < in + inlen; p++)
+	{
+		if (*p > 255)
+			return PJ_FALSE;
+	}
+	return PJ_TRUE;
+}
+
+static size_t escaped_len(const unsigned short *in, size_t inlen)
+{
+	size_t ret = 0;
+	for (const unsigned short *p = in; p < in + inlen; p++)
+	{
+		ret++;
+		if (is_7bit_escape(*p))
+			ret++;
+	}
+
+	return ret;
+}
+
+static unsigned short *next_segment(unsigned char dcs, unsigned short *in, size_t inlen)
+{
+	int remaining = 153;
+
+	if (is7bit(dcs))
+	{
+		remaining = 153;
+	} else if (is8bit(dcs))
+	{
+		remaining = 134;
+	} else
+	{
+		remaining = 67;
+	}
+
+	for (unsigned short *p = in; p < in + inlen; p++)
+	{
+		size_t curlen = is7bit(dcs) && is_7bit_escape(*p) ? 2 : 1;
+		if (remaining < curlen)
+			return p;
+		remaining -= curlen;
+	}
+
+	return in + inlen;
+}
+
+static int volte_send_sms(struct ast_sip_endpoint *endpoint, const char *orig_uri, struct msg_data *mdata)
+{
+	unsigned char buf[1024];
+	unsigned short utf16[2048];
+	unsigned char *p, *len_byte;
+	static uint8_t ref = 1;  // TODO: start at random
+	static uint8_t mr = 0;
+
+	if (!endpoint->smsc_uri || !endpoint->smsc_uri[0])
+	{
+		ast_log(LOG_ERROR, "VoLTE SMS - no SMSC specified\n");
+		return -1;
+	}
+
+	const unsigned char *utf8 = (const unsigned char *) ast_msg_get_body(mdata->msg);
+	unsigned short *utf16p = utf16;
+	while (*utf8 && utf16p - utf16 < sizeof(utf16) / sizeof(utf16[0]) - 2)
+	{
+		long l = utf8decode((unsigned char **)&utf8);
+		if (l < 0x10000)
+			*utf16p++ = l;
+		else {
+			*utf16p++ = 0xD800 | (l & 0x3ff);
+			*utf16p++ = 0xDC00 | ((l >> 10) & 0x3ff);
+		}
+	}
+
+	unsigned char dcs = 0;
+	int maxlen = 160;
+	size_t utf16len = utf16p - utf16;
+
+	if (is_7bit_compatible(utf16, utf16len))
+	{
+		dcs = 0x00;
+		maxlen = 160;
+	} else if (is_8bit_compatible(utf16, utf16len))
+	{
+		dcs = 0x04;
+		maxlen = 140;
+	} else
+	{
+		dcs = 0x08;
+		maxlen = 70;
+	}
+
+	const char *msg_to = ast_msg_get_to(mdata->msg);
+
+	const char *phone_uri = (msg_to && msg_to[0] ? msg_to : orig_uri);
+
+	if (ast_begins_with(phone_uri, "pjsip:")) {
+		phone_uri += 6;
+	}
+
+	char phone[50], smsc_phone[50];
+	{
+		pj_pool_t *pool = pjsip_endpt_create_pool(ast_sip_get_pjsip_endpoint(), "Phone numbers", 256, 256);
+		if (!pool) {
+			ast_log(LOG_ERROR, "Could not create pool\n");
+			return -1;
+		}
+		pjsip_uri *phone_uri_parsed = pjsip_parse_uri(pool, (char *) phone_uri, strlen(phone_uri), 0);
+		if (!phone_uri_parsed) {
+			ast_log(LOG_ERROR, "Could not parse URI '%s'\n", phone_uri);
+			return -1;
+		}
+		pjsip_sip_uri *phone_sip_uri = pjsip_uri_get_uri(phone_uri_parsed);
+		size_t phonelen = phone_sip_uri->user.slen;
+		if (phonelen > sizeof(phone) - 1)
+			phonelen = sizeof(phone) - 1;
+		strncpy(phone, phone_sip_uri->user.ptr, phonelen);
+		phone[phonelen] = '\0';
+
+		pjsip_uri *smsc_phone_uri_parsed = pjsip_parse_uri(pool, (char *) endpoint->smsc_uri, strlen(endpoint->smsc_uri), 0);
+		if (!smsc_phone_uri_parsed) {
+			ast_log(LOG_ERROR, "Could not parse URI '%s'\n", endpoint->smsc_uri);
+			return -1;
+		}
+		pjsip_sip_uri *smsc_phone_sip_uri = pjsip_uri_get_uri(smsc_phone_uri_parsed);
+		size_t smsc_phonelen = smsc_phone_sip_uri->user.slen;
+		if (smsc_phonelen > sizeof(smsc_phone) - 1)
+			smsc_phonelen = sizeof(smsc_phone) - 1;
+		strncpy(smsc_phone, smsc_phone_sip_uri->user.ptr, smsc_phonelen);
+		smsc_phone[smsc_phonelen] = '\0';
+		pjsip_endpt_release_pool(ast_sip_get_pjsip_endpoint(), pool);
+	}
+
+	size_t len = is7bit(dcs) ? escaped_len(utf16, utf16p - utf16) : (utf16p - utf16);
+	int parts = 0;
+
+	if (len <= maxlen) {
+		parts = 1;
+	} else {
+		for (unsigned short *p = utf16; p < utf16p; p = next_segment(dcs, p, utf16p - p), parts++);
+	}
+
+	int overall_status = 0;
+	unsigned short *start_segment = utf16;
+	static unsigned short concat_refnum_pool = 0; // TODO: start at random
+	unsigned short concat_refnum = concat_refnum_pool++;
+
+	for (int part = 0; part < parts; part++)
+	{
+		unsigned short *end_segment = parts == 1 ? utf16p : next_segment(dcs, start_segment, utf16p - start_segment);
+		buf[0] = 0x00; /* RP-DATA MS to network */
+		buf[1] = ref++; // Reference
+		buf[2] = 0x00; // No originator address
+		p = buf + 3;
+		p += packaddress(p, smsc_phone); // Destination Address: SMSC
+		// RP uses different length encoding: number of bytes including type byte rather than nibbles excluding type byte. Correct for it
+		buf[3] = (buf[3] + 3) / 2;
+		len_byte = p;
+		p++;
+
+		*p++ = 0x11 | ((parts > 1) ? 0x40 : 0);                      /* SMS_DATA */
+		*p++ = mr++;  /* TP-MR */
+		p += packaddress(p, phone);
+		*p++ = 0x00;                      /* TP-PID */
+		*p++ = dcs;
+		*p++ = 0xff;                      /* Validity period  */
+		if (parts == 1) {
+			p += packsms(dcs, p, 0, NULL, utf16len, utf16);
+		} else {
+			unsigned char udh[5];
+			udh[0] = 0x00; // Concatenated message
+			udh[1] = 0x03; // Length of IE
+			udh[2] = concat_refnum;
+			udh[3] = parts;
+			udh[4] = part + 1;
+			p += packsms(dcs, p, sizeof(udh), udh, end_segment - start_segment, start_segment);
+		}
+		*len_byte = p - len_byte - 1;
+
+		/* TODO: resend if no RP-ACK is received */
+		int status = volte_send_rp_data(mdata, orig_uri, endpoint, buf, p - buf);
+		if (status < 0)
+			overall_status = status;
+
+		start_segment = end_segment;
+	}
+
+	return overall_status;
+}
+
 /*!
  * \internal
  * \brief Send a MESSAGE
@@ -637,14 +1292,20 @@ static int msg_send(void *data)
 
 	ast_debug(3, "Request URI: %s\n", uri);
 
+	const char *msg_to_orig = ast_msg_get_to(mdata->msg);
+
+	if (endpoint->volte && is_uri_phone(msg_to_orig && msg_to_orig[0] ? msg_to_orig : uri)) {
+		return volte_send_sms(endpoint, uri, mdata);
+	}
+
 	if (ast_sip_create_request("MESSAGE", NULL, endpoint, uri, NULL, &tdata)) {
 		ast_log(LOG_WARNING, "PJSIP MESSAGE - Could not create request\n");
 		return -1;
 	}
 
 	/* If there was a To in the actual message, */
-	if (!ast_strlen_zero(ast_msg_get_to(mdata->msg))) {
-		char *msg_to = ast_strdupa(ast_msg_get_to(mdata->msg));
+	if (!ast_strlen_zero(msg_to_orig)) {
+		char *msg_to = ast_strdupa(msg_to_orig);
 
 		/*
 		 * It's possible that the message To was copied from
@@ -789,13 +1450,15 @@ static pj_bool_t module_on_rx_request(pjsip_rx_data *rdata)
 {
 	enum pjsip_status_code code;
 	struct ast_msg *msg;
+	pj_bool_t is_sms;
+	int ack_ref = -1;
 
 	/* if not a MESSAGE, don't handle */
 	if (pjsip_method_cmp(&rdata->msg_info.msg->line.req.method, &pjsip_message_method)) {
 		return PJ_FALSE;
 	}
 
-	code = check_content_type(rdata);
+	code = check_content_type(rdata, &is_sms);
 	if (code != PJSIP_SC_OK) {
 		send_response(rdata, code, NULL, NULL);
 		return PJ_TRUE;
@@ -807,7 +1470,7 @@ static pj_bool_t module_on_rx_request(pjsip_rx_data *rdata)
 		return PJ_TRUE;
 	}
 
-	code = rx_data_to_ast_msg(rdata, msg);
+	code = rx_data_to_ast_msg(rdata, msg, is_sms, &ack_ref);
 	if (code != PJSIP_SC_OK) {
 		send_response(rdata, code, NULL, NULL);
 		ast_msg_destroy(msg);
@@ -828,8 +1491,13 @@ static pj_bool_t module_on_rx_request(pjsip_rx_data *rdata)
 	 * create a transaction due to a duplicate key. If we are unable to send
 	 * a response, we should not queue the message to the dialplan
 	 */
-	if (!send_response(rdata, PJSIP_SC_ACCEPTED, NULL, NULL)) {
+	if (!send_response(rdata, is_sms ? PJSIP_SC_OK : PJSIP_SC_ACCEPTED, NULL, NULL)) {
 		ast_msg_queue(msg);
+	}
+
+	if (is_sms && ack_ref >= 0)
+	{
+		send_rpack(rdata, ack_ref);
 	}
 
 	return PJ_TRUE;

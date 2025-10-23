@@ -4640,7 +4640,7 @@ static pj_status_t session_on_tx_request(pjsip_tx_data *tdata)
 				volte_add_accept(tdata);
 
 			/* Accept-Contact */
-			volte_add_accept_contact(tdata, "*;+g.3gpp.icsi-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel\";audio");
+			volte_add_accept_contact(tdata, "*;+g.3gpp.icsi-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel\";audio;+g.3gpp.smsip");
 
 			/* P-Preferred-Service: GSMA FCM.01 3.2.3.3 */
 			volte_add_p_preferred_service(tdata, "urn:urn-7:3gpp-service.ims.icsi.mmtel");
