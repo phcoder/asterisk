@@ -4645,11 +4645,6 @@ static pj_status_t session_on_tx_request(pjsip_tx_data *tdata)
 			/* P-Preferred-Service: GSMA FCM.01 3.2.3.3 */
 			volte_add_p_preferred_service(tdata, "urn:urn-7:3gpp-service.ims.icsi.mmtel");
 
-			/* Add "precondition" to Supported header. */
-			if (volte_add_supported_precondition(tdata)) {
-				ast_log(LOG_ERROR, "Failed to add precondition to 'Supported' header.\n");
-			}
-
 			/* Add P-Early-Media: supported */
 			if (volte_add_p_early_media_supported(tdata)) {
 				ast_log(LOG_ERROR, "Failed to add P-Early-Media header.\n");
@@ -6897,6 +6892,7 @@ AST_TEST_DEFINE(test_resolve_refresh_media_states)
 static int load_module(void)
 {
 	pjsip_endpoint *endpt;
+	const pj_str_t str_precondition = { "precondition", 12 };
 
 	if (!ast_sip_get_sorcery() || !ast_sip_get_pjsip_endpoint()) {
 		return AST_MODULE_LOAD_DECLINE;
@@ -6929,6 +6925,8 @@ static int load_module(void)
 #ifdef TEST_FRAMEWORK
 	AST_TEST_REGISTER(test_resolve_refresh_media_states);
 #endif
+	pjsip_endpt_add_capability(ast_sip_get_pjsip_endpoint(), NULL, PJSIP_H_SUPPORTED, NULL, 1, &str_precondition);
+
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
