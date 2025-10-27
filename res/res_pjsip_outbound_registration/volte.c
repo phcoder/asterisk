@@ -36,13 +36,23 @@ struct ipsec_alg {
 	const char *kernel_name;
 };
 
+/* Do not reorder! The code in volte_set_xfrm() expects this order. */
 const struct ipsec_alg g_ipsec_alg[] = {
 	{ "hmac-md5-96", "md5" },
 	{ "hmac-sha-1-96", "sha1" },
 	{ NULL, NULL }
 };
 
+/* Do not reorder! The code in volte_set_xfrm() expects this order.
+ * The upper cipher is the most preferred ones. "null" must be the last. */
 const struct ipsec_alg g_ipsec_ealg[] = {
+	{ "aes-cbc", "cbc(aes)" },
+	{ "null", "cipher_null" },
+	{ NULL, NULL }
+};
+
+/* This list has only one entry. It is used when encryption is diabled. */
+const struct ipsec_alg g_ipsec_ealg_null[] = {
 	{ "null", "cipher_null" },
 	{ NULL, NULL }
 };
@@ -208,7 +218,7 @@ spi_alloc_failed:
 }
 
 /* Set new SA and SP entries upon secuirty handshake. */
-static pj_status_t volte_set_xfrm(struct ast_sip_transport_state *transport_state, const pj_str_t *alg, const pj_str_t *ealg, uint8_t *ik)
+static pj_status_t volte_set_xfrm(struct ast_sip_transport_state *transport_state, const pj_str_t *alg, const pj_str_t *ealg, uint8_t *ik, uint8_t *ck)
 {
 	struct xfrm_algobuf auth_algo, ciph_algo;
 	int i, j;
@@ -224,7 +234,7 @@ static pj_status_t volte_set_xfrm(struct ast_sip_transport_state *transport_stat
 			break;
 	}
 	if (!g_ipsec_alg[i].kernel_name) {
-		ast_log(LOG_ERROR, "Given 'alg' not supported.\n");
+		ast_log(LOG_ERROR, "Given 'alg=%.*s' not supported.\n", fmt_strp(alg));
 		return -EINVAL;
 	}
 	for (j = 0; g_ipsec_ealg[j].sip_name; j++) {
@@ -232,18 +242,19 @@ static pj_status_t volte_set_xfrm(struct ast_sip_transport_state *transport_stat
 			break;
 	}
 	if (!g_ipsec_ealg[j].kernel_name) {
-		ast_log(LOG_ERROR, "Given 'ealg' not supported.\n");
+		ast_log(LOG_ERROR, "Given 'ealg=%.*s' not supported.\n", fmt_strp(ealg));
 		return -EINVAL;
 	}
+
 	ast_assert(sizeof(auth_algo.buf) >= 160);
 	memset(&auth_algo, 0, sizeof(auth_algo));
 	strcpy(auth_algo.algo.alg_name, g_ipsec_alg[i].kernel_name);
 	switch (i) {
-	case 0:
+	case 0:  // hmac-md5-96
 		memcpy(auth_algo.algo.alg_key, ik, 16);
 		auth_algo.algo.alg_key_len = 128;
 		break;
-	case 1:
+	case 1:  // hmac-sha-1-96
 		memcpy(auth_algo.algo.alg_key, ik, 16);
 		memset(auth_algo.algo.alg_key + 16, 0x00, 4);
 		auth_algo.algo.alg_key_len = 160;
@@ -252,10 +263,16 @@ static pj_status_t volte_set_xfrm(struct ast_sip_transport_state *transport_stat
 	ast_debug(1, "xfrm: auth key: 0x%02x%02x%02x%02x\n",
 		  (uint8_t)auth_algo.algo.alg_key[0], (uint8_t)auth_algo.algo.alg_key[1],
 		  (uint8_t)auth_algo.algo.alg_key[2], (uint8_t)auth_algo.algo.alg_key[3]);
+
+	ast_assert(sizeof(ciph_algo.buf) >= 128);
 	memset(&ciph_algo, 0, sizeof(ciph_algo));
 	strcpy(ciph_algo.algo.alg_name, g_ipsec_ealg[j].kernel_name);
 	switch (j) {
-	case 0:
+	case 0:  // aes-cbc
+		memcpy(ciph_algo.algo.alg_key, ck, 16);
+		ciph_algo.algo.alg_key_len = 128;
+		break;
+	case 1:  // null
 		ciph_algo.algo.alg_key_len = 0;
 		break;
 	}
@@ -593,8 +610,10 @@ pj_status_t volte_add_security_client(struct ast_sip_transport_state *transport_
 	local_port_c = pj_sockaddr_get_port(&transport_state->volte.local_addr_c);
 	local_port_s = pj_sockaddr_get_port(&transport_state->volte.local_addr_s);
 
-	status = add_security_client_hdr(tdata, g_ipsec_alg, g_ipsec_ealg, transport_state->volte.local_spi_c,
-					 transport_state->volte.local_spi_s, local_port_c, local_port_s);
+	status = add_security_client_hdr(tdata, g_ipsec_alg,
+					 (transport_state->volte.offer_encryption) ? g_ipsec_ealg : g_ipsec_ealg_null,
+					 transport_state->volte.local_spi_c, transport_state->volte.local_spi_s,
+					 local_port_c, local_port_s);
 	if (status)
 		return status;
 
@@ -603,7 +622,7 @@ pj_status_t volte_add_security_client(struct ast_sip_transport_state *transport_
 
 /* Set new transport and set IPSec transformations */
 pj_status_t volte_set_transport(struct ast_sip_transport_state *transport_state, pjsip_tx_data *tdata,
-				const pj_str_t *alg, const pj_str_t *ealg, uint8_t *ik, uint32_t remote_spi_c,
+				const pj_str_t *alg, const pj_str_t *ealg, uint8_t *ik, uint8_t *ck, uint32_t remote_spi_c,
 				uint32_t remote_spi_s, uint16_t remote_port_c, uint16_t remote_port_s)
 {
 	int local_port_c, local_port_s;
@@ -637,7 +656,7 @@ pj_status_t volte_set_transport(struct ast_sip_transport_state *transport_state,
 	/* Set IPSec transform. */
 	transport_state->volte.remote_spi_c = remote_spi_c;
 	transport_state->volte.remote_spi_s = remote_spi_s;
-	volte_set_xfrm(transport_state, alg, ealg, ik);
+	volte_set_xfrm(transport_state, alg, ealg, ik, ck);
 
 	/* Create sockets (listening and outgoing) with new transport ports. */
 	if (!tdata->tp_info.transport || !tdata->tp_info.transport->factory) {

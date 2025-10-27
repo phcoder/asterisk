@@ -412,6 +412,8 @@ struct sip_outbound_registration {
 	unsigned int manual_register;
 	/*! \brief VoLTE support */
 	unsigned int volte;
+	/*! \brief Enable IPSec encryption support for VoLTE */
+	unsigned int ipsec_encryption;
 };
 
 /*! \brief States of the VoLTE registration process */
@@ -1002,6 +1004,9 @@ static pj_status_t volte_registration_client(struct sip_outbound_registration_cl
 				transport_state->volte.local_port_s = transp->sec_port_s_min;
 			}
 		}
+		/* Set encryption flag. */
+		if (transp->sec_encryption)
+			transport_state->volte.offer_encryption = true;
 
 		if (volte_alloc_transport(transport_state)) {
 			ast_log(LOG_ERROR, "Failed to alloc transport.\n");
@@ -1760,7 +1765,7 @@ static int handle_volte_unauthorized(struct registration_response *response, uin
 	}
 
 	if (volte_set_transport(transport_state, response->old_request, &sec.alg, &sec.ealg,
-				out_ik, pj_strtoul(&sec.spi_c), pj_strtoul(&sec.spi_s),
+				out_ik, out_ck, pj_strtoul(&sec.spi_c), pj_strtoul(&sec.spi_s),
 				pj_strtoul(&sec.port_c), pj_strtoul(&sec.port_s))) {
 		ast_log(LOG_ERROR, "Failed to set transport.\n");
 		goto out;

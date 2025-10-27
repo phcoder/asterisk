@@ -27,7 +27,7 @@ pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_stat
 pj_status_t volte_alloc_transport(struct ast_sip_transport_state *transport_state);
 pj_status_t volte_add_security_client(struct ast_sip_transport_state *transport_state, pjsip_tx_data *tdata);
 pj_status_t volte_set_transport(struct ast_sip_transport_state *transport_state, pjsip_tx_data *tdata,
-				const pj_str_t *alg, const pj_str_t *ealg, uint8_t *ik, uint32_t remote_spi_c,
+				const pj_str_t *alg, const pj_str_t *ealg, uint8_t *ik, uint8_t *ck, uint32_t remote_spi_c,
 				uint32_t remote_spi_s, uint16_t remote_port_c, uint16_t remote_port_s);
 pj_status_t volte_get_security_server(struct ast_sip_transport_state *transport_state, pjsip_rx_data *rdata,
 				      struct security_server *sec);

@@ -1794,6 +1794,7 @@ int ast_sip_initialize_sorcery_transport(void)
 	ast_sorcery_object_field_register(sorcery, "transport", "sec_port_c_max", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_transport, sec_port_c_max));
 	ast_sorcery_object_field_register(sorcery, "transport", "sec_port_s_min", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_transport, sec_port_s_min));
 	ast_sorcery_object_field_register(sorcery, "transport", "sec_port_s_max", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_transport, sec_port_s_max));
+	ast_sorcery_object_field_register(sorcery, "transport", "sec_encryption", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_transport, sec_encryption));
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "p_access_network_info", "", transport_p_access_network_info, privkey_file_to_str, NULL, 0, 0);
 
 	ast_sip_register_endpoint_formatter(&endpoint_transport_formatter);

@@ -122,6 +122,7 @@ struct ast_sip_transport_volte {
 	/*! Current local ports used */
 	int local_port_c, local_port_s;
 	/*! Current states for sec-agree */
+	int offer_encryption;
 	pj_sockaddr local_addr_c, remote_addr_s;
 	pj_sockaddr remote_addr_c, local_addr_s;
 	uint32_t local_spi_c, remote_spi_s;
@@ -339,6 +340,8 @@ struct ast_sip_transport {
 	/*! Settings for local ports */
 	int sec_port_c_min, sec_port_c_max;
 	int sec_port_s_min, sec_port_s_max;
+	/*! Settings for offering IPSec encryption */
+	int sec_encryption;
 };
 
 #define SIP_SORCERY_DOMAIN_ALIAS_TYPE "domain_alias"
