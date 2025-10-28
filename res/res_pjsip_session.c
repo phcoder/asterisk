@@ -4339,15 +4339,13 @@ static int new_invite(struct new_invite *invite)
 
 		int i;
 
-		if (pjsip_inv_answer(invite->session->inv_session, 183, NULL, NULL, &packet) == PJ_SUCCESS)
-			ast_sip_session_send_response(invite->session, packet);
 		if (invite->session->precondition_required) {
+			/* Precondion required or supported. */
+			if (pjsip_inv_answer(invite->session->inv_session, 183, NULL, NULL, &packet) == PJ_SUCCESS)
+				ast_sip_session_send_response(invite->session, packet);
 			for (i = 0; i < PJMEDIA_MAX_SDP_MEDIA; i++) {
 				volte_update_sdp_qos(&invite->session->qos_status[i]);
 			}
-		}
-		if (invite->session->precondition_required) {
-			/* Precondion required or supported. */
 			ast_debug(1, "%s: Precondition state is waiting for UPDATE to complete.\n",
 				  ast_sip_session_get_name(invite->session));
 			invite->session->precondition_state = AST_SIP_SESSION_PRECONDITION_MT_WAIT_UPDATE;
