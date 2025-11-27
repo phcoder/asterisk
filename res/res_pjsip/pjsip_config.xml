@@ -1954,13 +1954,13 @@
 						Defines port rage for VoLTE transport.
 					</para></description>
 				</configOption>
-				<configOption name="sec_encryption" default="yo">
+				<configOption name="sec_encryption" default="no">
 					<synopsis>Offer support for IPSec encryption, rather than just the 'null' encryption.</synopsis>
 					<description>
 						<para>IPSec encryption for VoLTE transport is disabled by default.
 						It is not required in most networks. If this option is set to 'yes',
 						encryption is offered. If accepted, no wireshark tracing is possible
-						witout providing the encryption keys.
+						without providing the encryption keys.
 						</para>
 					</description>
 				</configOption>
