@@ -471,6 +471,7 @@ static void sip_resolve(pjsip_resolver_t *resolver, pj_pool_t *pool, const pjsip
 	char host[NI_MAXHOST];
 	pj_str_t host_str;
 	int res = 0;
+	uint16_t secure_port = 0;
 
 	ast_copy_pj_str(host, &target->addr.host, sizeof(host));
 
@@ -488,6 +489,21 @@ static void sip_resolve(pjsip_resolver_t *resolver, pj_pool_t *pool, const pjsip
 		ast_debug(2, "Performing local resolution of target '%s' to '%s'\n", host, sorcery_resolve->ip);
 
 		ast_copy_string(host, sorcery_resolve->ip, sizeof(host));
+
+		/* Volte: Resolve secure port from transport. */
+		if (sorcery_resolve->transport && sorcery_resolve->transport[0]) {
+			ast_debug(2, "Transport '%s' is given\n", sorcery_resolve->transport);
+			struct ast_sip_transport_state *transport_state;
+			transport_state = ast_sip_get_transport_state(sorcery_resolve->transport);
+			if (transport_state) {
+				secure_port = pj_sockaddr_get_port(&transport_state->volte.remote_addr_s);
+				if (secure_port > 0 && secure_port < 0xFFFF) {
+					ast_debug(2, "Got secure port from transport section '%d'\n", secure_port);
+				}
+			} else {
+				ast_log(LOG_ERROR, "Given transport '%s' for host entry '%s' does not exist.\n", sorcery_resolve->transport, host);
+			}
+		}
 	} else {
 		host_str.slen = target->addr.host.slen;
 		host_str.ptr = target->addr.host.ptr;
@@ -539,7 +555,11 @@ static void sip_resolve(pjsip_resolver_t *resolver, pj_pool_t *pool, const pjsip
 			pj_inet_pton(pj_AF_INET6(), &host_str, &addresses.entry[0].addr.ipv6.sin6_addr);
 		}
 
-		pj_sockaddr_set_port(&addresses.entry[0].addr, !target->addr.port ? pjsip_transport_get_default_port_for_type(type) : target->addr.port);
+		if (secure_port > 0 && secure_port < 0xFFFF) {
+			pj_sockaddr_set_port(&addresses.entry[0].addr, secure_port);
+		} else {
+			pj_sockaddr_set_port(&addresses.entry[0].addr, !target->addr.port ? pjsip_transport_get_default_port_for_type(type) : target->addr.port);
+		}
 
 		ast_debug(2, "Target '%s' is an IP address, skipping resolution\n", host);
 

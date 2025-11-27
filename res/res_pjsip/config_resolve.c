@@ -82,6 +82,8 @@ int ast_sip_initialize_sorcery_resolve(void)
 			OPT_NOOP_T, 0, 0);
 	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_RESOLVE_TYPE, "ip",
 			"", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_resolve, ip));
+	ast_sorcery_object_field_register(sorcery, SIP_SORCERY_RESOLVE_TYPE, "transport",
+			"", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_resolve, transport));
 
 	return 0;
 }

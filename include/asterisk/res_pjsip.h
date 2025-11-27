@@ -369,6 +369,8 @@ struct ast_sip_resolve {
 	AST_DECLARE_STRING_FIELDS(
 		/*! IP */
 		AST_STRING_FIELD(ip);
+		/*! transport to resolve secure port */
+		AST_STRING_FIELD(transport);
 	);
 };
 
