@@ -689,6 +689,11 @@ pj_status_t volte_set_transport(struct ast_sip_transport_state *transport_state,
 	transport_state->volte.transport = tdata->tp_info.transport;
 	transport_state->volte.tp_factory = tdata->tp_info.transport->factory;
 
+	/* Update current transaction address. */
+	memcpy(&tdata->dest_info.addr.entry[tdata->dest_info.cur_addr].addr,
+	       &transport_state->volte.remote_addr_s,
+	       tdata->dest_info.addr.entry[tdata->dest_info.cur_addr].addr_len);
+
 	return PJ_SUCCESS;
 }
 
