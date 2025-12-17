@@ -2766,6 +2766,8 @@ pjsip_generic_string_hdr *ast_sip_add_header2(pjsip_tx_data *tdata,
  */
 int ast_sip_add_body(pjsip_tx_data *tdata, const struct ast_sip_body *body);
 
+int ast_sip_add_binary_body(pjsip_tx_data *tdata, const struct ast_sip_body *body, size_t len);
+
 /*!
  * \brief Add a multipart body to an outbound SIP message
  *

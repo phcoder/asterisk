@@ -2056,6 +2056,30 @@ int ast_sip_add_body(pjsip_tx_data *tdata, const struct ast_sip_body *body)
 	return 0;
 }
 
+static pjsip_msg_body *ast_body_to_pjsip_binary_body(pj_pool_t *pool, const struct ast_sip_body *body, size_t len)
+{
+	pj_str_t type;
+	pj_str_t subtype;
+	pj_str_t body_text;
+
+	pj_cstr(&type, body->type);
+	pj_cstr(&subtype, body->subtype);
+	body_text.ptr = pj_pool_alloc(pool, len);
+	if (!body_text.ptr)
+		return NULL;
+	memcpy(body_text.ptr, body->body_text, len);
+	body_text.slen = len;
+
+	return pjsip_msg_body_create(pool, &type, &subtype, &body_text);
+}
+
+int ast_sip_add_binary_body(pjsip_tx_data *tdata, const struct ast_sip_body *body, size_t len)
+{
+	pjsip_msg_body *pjsip_body = ast_body_to_pjsip_binary_body(tdata->pool, body, len);
+	tdata->msg->body = pjsip_body;
+	return 0;
+}
+
 int ast_sip_add_body_multipart(pjsip_tx_data *tdata, const struct ast_sip_body *bodies[], int num_bodies)
 {
 	int i;
