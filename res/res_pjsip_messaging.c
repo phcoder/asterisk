@@ -852,7 +852,9 @@ static enum pjsip_status_code rx_data_to_ast_msg(pjsip_rx_data *rdata, struct as
 		res |= ast_msg_set_var(msg, "PJSIP_ENDPOINT", endpt->id.self.name.str);
 	}
 
-	res |= headers_to_vars(rdata, msg);
+	if (!is_sms) {
+		res |= headers_to_vars(rdata, msg);
+	}
 
 	return !res ? PJSIP_SC_OK : PJSIP_SC_INTERNAL_SERVER_ERROR;
 }
