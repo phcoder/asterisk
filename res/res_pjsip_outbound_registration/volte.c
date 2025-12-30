@@ -555,7 +555,7 @@ pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_stat
 			return status;
 		}
 		status = transport_state->volte.transport->connect_new_sock(transport_state->volte.transport,
-				&transport_state->volte.local_addr_c, &transport_state->volte.remote_addr_orig);
+				&transport_state->volte.local_addr_orig, &transport_state->volte.remote_addr_orig);
 		if (status != PJ_SUCCESS) {
 			ast_log(LOG_ERROR, "Failed to change connection addresses (errno=%d).\n", errno);
 			return status;
