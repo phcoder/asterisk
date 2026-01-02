@@ -540,7 +540,7 @@ pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_stat
 	if (old_port_s > 0 && old_port_s < 65535 && transport_state->volte.transport) {
 		/* Create factory with original transport port. */
 		status = pjsip_tcp_transport_restart(transport_state->volte.transport->factory,
-						     &transport_state->volte.local_addr_orig, NULL);
+						     &transport_state->volte.local_addr_c, NULL);
 		if (status != PJ_SUCCESS) {
 			ast_log(LOG_ERROR, "Failed to change server connection addresses (errno=%d).\n", errno);
 			return status;
@@ -561,7 +561,7 @@ pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_stat
 			return status;
 		}
 	}
-	transport_state->volte.transport = NULL;
+	// transport_state->volte.transport = NULL;
 
 	/* Reset transport addresses. */
 	if (transport_state->volte.tp_factory) {
