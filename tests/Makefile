@@ -25,3 +25,5 @@ test_capture.o: _ASTCFLAGS+=$(AST_NO_FORMAT_Y2K)
 test_crypto.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION)
 test_strings.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION) $(AST_NO_STRINGOP_TRUNCATION)
 test_voicemail_api.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION)
+
+$(call MOD_ADD_C,test_sms,../apps/smslib.c)
