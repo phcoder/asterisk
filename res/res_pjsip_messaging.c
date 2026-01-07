@@ -392,69 +392,6 @@ static void hex_body(char *bufout, unsigned char *buf, int len)
 	*ptrout++ = 0;
 }
 
-static void
-utf16_to_utf8(unsigned short *in, size_t inlen, char *dest)
-{
-	uint32_t code_high = 0;
-
-	while (inlen--)
-	{
-		uint32_t code = *in++;
-
-		if (code_high)
-		{
-			if (code >= 0xDC00 && code <= 0xDFFF)
-			{
-				/* Surrogate pair.  */
-				code = ((code_high - 0xD800) << 10) + (code - 0xDC00) + 0x10000;
-
-				*dest++ = (code >> 18) | 0xF0;
-				*dest++ = ((code >> 12) & 0x3F) | 0x80;
-				*dest++ = ((code >> 6) & 0x3F) | 0x80;
-				*dest++ = (code & 0x3F) | 0x80;
-			}
-			else
-			{
-				/* Error...  */
-				*dest++ = '?';
-				/* *src may be valid. Don't eat it.  */
-				in--;
-				inlen++;
-			}
-
-			code_high = 0;
-		}
-		else
-		{
-			if (code <= 0x007F)
-				*dest++ = code;
-			else if (code <= 0x07FF)
-			{
-				*dest++ = (code >> 6) | 0xC0;
-				*dest++ = (code & 0x3F) | 0x80;
-	    }
-			else if (code >= 0xD800 && code <= 0xDBFF)
-			{
-				code_high = code;
-				continue;
-			}
-			else if (code >= 0xDC00 && code <= 0xDFFF)
-			{
-				/* Error... */
-				*dest++ = '?';
-			}
-			else
-			{
-				*dest++ = (code >> 12) | 0xE0;
-				*dest++ = ((code >> 6) & 0x3F) | 0x80;
-				*dest++ = (code & 0x3F) | 0x80;
-			}
-		}
-	}
-
-	*dest = '\0';
-}
-
 static void parse_tpdu(struct ast_msg *msg, unsigned char *tpdu, int tpdu_len)
 {
 	if (tpdu_len < 2)
@@ -471,7 +408,7 @@ static void parse_tpdu(struct ast_msg *msg, unsigned char *tpdu, int tpdu_len)
 	/*int rp = ((tpdu[0] & 0x80) ? 1 : 0);*/
 	int p = 1;
 	char oa[300];
-	p += unpackaddress(oa, tpdu + p);
+	p += unpackaddress(oa, tpdu + p, sizeof(oa));
 	if (p + 9 > tpdu_len)
 		return;
 	/*int pid = tpdu[p++] */p++;
@@ -485,7 +422,7 @@ static void parse_tpdu(struct ast_msg *msg, unsigned char *tpdu, int tpdu_len)
 	ud[udl] = 0;
 
 	char buf2[300 * 4 + 5];
-	utf16_to_utf8(ud, udl, buf2);
+	utf16_to_utf8(ud, udl, buf2, sizeof(buf2));
 	ast_log(LOG_DEBUG, "SMS UD='%s' OA='%s'.\n", buf2, oa);
 
 	/* TODO: udh, scts */

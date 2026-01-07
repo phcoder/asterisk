@@ -92,13 +92,39 @@ struct timeval unpackdate(unsigned char *i)
 	return ast_mktime(&t, NULL);
 }
 
+static unsigned int
+decode_7bit(unsigned short *ud, unsigned char *i, unsigned int l, unsigned char b)
+{
+  	unsigned short *o = ud;
+	unsigned int p = 0;
+  	while (l--) {
+		unsigned char v;
+		if (b < 2) {
+			v = ((i[p] >> b) & 0x7F);       /* everything in one byte */
+		} else {
+			v = ((((i[p] >> b) + (i[p + 1] << (8 - b)))) & 0x7F);
+		}
+		b += 7;
+		if (b >= 8) {
+			b -= 8;
+			p++;
+		}
+		/* 0x00A0 is the encoding of ESC (27) in defaultalphabet */
+		if (o > ud && o[-1] == 0x00A0 && escapes[v]) {
+			o[-1] = escapes[v];
+		} else {
+			*o++ = defaultalphabet[v];
+		}
+	}
+	return o - ud;
+}
+
 /*! \brief unpacks bytes (7 bit encoding) at i, len l septets,
 	and places in udh and ud setting udhl and udl. udh not used
 	if udhi not set */
 static void unpacksms7(unsigned char *i, unsigned char l, unsigned char *udh, int *udhl, unsigned short *ud, int *udl, char udhi)
 {
 	unsigned char b = 0, p = 0;
-	unsigned short *o = ud;
 	*udhl = 0;
 	if (udhi && l) {                        /* header */
 		int h = i[p];
@@ -125,26 +151,7 @@ static void unpacksms7(unsigned char *i, unsigned char l, unsigned char *udh, in
 			}
 		}
 	}
-	while (l--) {
-		unsigned char v;
-		if (b < 2) {
-			v = ((i[p] >> b) & 0x7F);       /* everything in one byte */
-		} else {
-			v = ((((i[p] >> b) + (i[p + 1] << (8 - b)))) & 0x7F);
-		}
-		b += 7;
-		if (b >= 8) {
-			b -= 8;
-			p++;
-		}
-		/* 0x00A0 is the encoding of ESC (27) in defaultalphabet */
-		if (o > ud && o[-1] == 0x00A0 && escapes[v]) {
-			o[-1] = escapes[v];
-		} else {
-			*o++ = defaultalphabet[v];
-		}
-	}
-	*udl = (o - ud);
+	*udl = decode_7bit(ud, i + p, l, b);
 }
 
 /*! \brief unpacks bytes (8 bit encoding) at i, len l septets,
@@ -220,14 +227,89 @@ int unpacksms(unsigned char dcs, unsigned char *i, unsigned char *udh, int *udhl
 	return l + 1;
 }
 
+void
+utf16_to_utf8(unsigned short *in, size_t inlen, char *dest, int maxlen)
+{
+	uint32_t code_high = 0;
+
+	if (!maxlen)
+		return;
+	maxlen--;
+
+	while (inlen-- && maxlen > 0)
+	{
+		uint32_t code = *in++;
+
+		if (code_high)
+		{
+			if (code >= 0xDC00 && code <= 0xDFFF)
+			{
+				/* Surrogate pair.  */
+				code = ((code_high - 0xD800) << 10) + (code - 0xDC00) + 0x10000;
+
+				if (maxlen-- > 0) *dest++ = (code >> 18) | 0xF0;
+				if (maxlen-- > 0) *dest++ = ((code >> 12) & 0x3F) | 0x80;
+				if (maxlen-- > 0) *dest++ = ((code >> 6) & 0x3F) | 0x80;
+				if (maxlen-- > 0) *dest++ = (code & 0x3F) | 0x80;
+			}
+			else
+			{
+				/* Error...  */
+				if (maxlen-- > 0) *dest++ = '?';
+				/* *src may be valid. Don't eat it.  */
+				in--;
+				inlen++;
+			}
+
+			code_high = 0;
+		}
+		else
+		{
+			if (code <= 0x007F)
+			{
+				if (maxlen-- > 0) *dest++ = code;
+			}
+			else if (code <= 0x07FF)
+			{
+				if (maxlen-- > 0) *dest++ = (code >> 6) | 0xC0;
+				if (maxlen-- > 0) *dest++ = (code & 0x3F) | 0x80;
+			}
+			else if (code >= 0xD800 && code <= 0xDBFF)
+			{
+				code_high = code;
+				continue;
+			}
+			else if (code >= 0xDC00 && code <= 0xDFFF)
+			{
+				/* Error... */
+				if (maxlen-- > 0) *dest++ = '?';
+			}
+			else
+			{
+				if (maxlen-- > 0) *dest++ = (code >> 12) | 0xE0;
+				if (maxlen-- > 0) *dest++ = ((code >> 6) & 0x3F) | 0x80;
+				if (maxlen-- > 0) *dest++ = (code & 0x3F) | 0x80;
+			}
+		}
+	}
+
+	*dest = '\0';
+}
+
 /*! \brief unpack an address from i, return byte length, unpack to o */
-unsigned char unpackaddress(char *o, unsigned char *i)
+unsigned char unpackaddress(char *o, unsigned char *i, unsigned int maxlen)
 {
 	unsigned char l = i[0], p;
+	if ((i[1] & 0xf0) == 0xd0) {
+		unsigned short s[300];
+		unsigned int sl = decode_7bit(s, i + 2, (l * 4) / 7, 0);
+		utf16_to_utf8(s, sl, o, maxlen);
+		return (l + 5) / 2;
+	}
 	if (i[1] == 0x91) {
 		*o++ = '+';
 	}
-	for (p = 0; p < l; p++) {
+	for (p = 0; p < l && p < maxlen - 1; p++) {
 		if (p & 1) {
 			*o++ = (i[2 + p / 2] >> 4) + '0';
 		} else {
