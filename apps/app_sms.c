@@ -630,7 +630,7 @@ static unsigned char sms_handleincoming (sms_t * h)
 			ast_copy_string(h->oa, h->cli, sizeof(h->oa));
 			h->scts = ast_tvnow();
 			h->mr = h->imsg[p++];
-			p += unpackaddress(h->da, h->imsg + p);
+			p += unpackaddress(h->da, h->imsg + p, sizeof(h->da));
 			h->pid = h->imsg[p++];
 			h->dcs = h->imsg[p++];
 			if ((h->imsg[2] & 0x18) == 0x10) {       /* relative VP */
@@ -665,7 +665,7 @@ static unsigned char sms_handleincoming (sms_t * h)
 			h->udhi = ((h->imsg[2] & 0x40) ? 1 : 0);
 			h->rp = ((h->imsg[2] & 0x80) ? 1 : 0);
 			h->mr = -1;
-			p += unpackaddress(h->oa, h->imsg + p);
+			p += unpackaddress(h->oa, h->imsg + p, sizeof(h->oa));
 			h->pid = h->imsg[p++];
 			h->dcs = h->imsg[p++];
 			h->scts = unpackdate(h->imsg + p);
