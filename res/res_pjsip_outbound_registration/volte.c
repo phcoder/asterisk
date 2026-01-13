@@ -530,38 +530,41 @@ pj_status_t volte_del_authorization(pjsip_tx_data *tdata)
 pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_state)
 {
 	pj_status_t status;
-	int old_port_c, old_port_s;
 
 	/* Cleanup IPSec transform. */
 	volte_cleanup_xfrm(transport_state);
 
 	/* Cleanup old transport. */
-	old_port_s = pj_sockaddr_get_port(&transport_state->volte.local_addr_s);
-	if (old_port_s > 0 && old_port_s < 65535 && transport_state->volte.transport) {
-		/* Create factory with original transport port. */
-		status = pjsip_tcp_transport_restart(transport_state->volte.transport->factory,
-						     &transport_state->volte.local_addr_orig, NULL);
-		if (status != PJ_SUCCESS) {
-			ast_log(LOG_ERROR, "Failed to change server connection addresses (errno=%d).\n", errno);
-			return status;
+	if (transport_state->volte.transport) {
+		int old_port_c, old_port_s;
+
+		old_port_s = pj_sockaddr_get_port(&transport_state->volte.local_addr_s);
+		if (old_port_s > 0 && old_port_s < 65535) {
+			/* Create factory with original transport port. */
+			status = pjsip_tcp_transport_restart(transport_state->volte.transport->factory,
+							     &transport_state->volte.local_addr_orig, NULL);
+			if (status != PJ_SUCCESS) {
+				ast_log(LOG_ERROR, "Failed to change server connection addresses (errno=%d).\n", errno);
+				return status;
+			}
 		}
+		old_port_c = pj_sockaddr_get_port(&transport_state->volte.local_addr_c);
+		if (old_port_c > 0 && old_port_c < 65535) {
+			/* Create outgoing socket with original transport port. */
+			status = transport_state->volte.transport->create_new_sock(transport_state->volte.transport, NULL);
+			if (status != PJ_SUCCESS) {
+				ast_log(LOG_ERROR, "Failed to get connection addresses (errno=%d).\n", errno);
+				return status;
+			}
+			status = transport_state->volte.transport->connect_new_sock(transport_state->volte.transport,
+										    &transport_state->volte.local_addr_c, &transport_state->volte.remote_addr_orig);
+			if (status != PJ_SUCCESS) {
+				ast_log(LOG_ERROR, "Failed to change connection addresses (errno=%d).\n", errno);
+				return status;
+			}
+		}
+		transport_state->volte.transport = NULL;
 	}
-	old_port_c = pj_sockaddr_get_port(&transport_state->volte.local_addr_c);
-	if (old_port_c > 0 && old_port_c < 65535 && transport_state->volte.transport) {
-		/* Create outgoing socket with original transport port. */
-		status = transport_state->volte.transport->create_new_sock(transport_state->volte.transport, NULL);
-		if (status != PJ_SUCCESS) {
-			ast_log(LOG_ERROR, "Failed to get connection addresses (errno=%d).\n", errno);
-			return status;
-		}
-		status = transport_state->volte.transport->connect_new_sock(transport_state->volte.transport,
-				&transport_state->volte.local_addr_c, &transport_state->volte.remote_addr_orig);
-		if (status != PJ_SUCCESS) {
-			ast_log(LOG_ERROR, "Failed to change connection addresses (errno=%d).\n", errno);
-			return status;
-		}
-	}
-	transport_state->volte.transport = NULL;
 
 	/* Reset transport addresses. */
 	if (transport_state->volte.tp_factory) {
