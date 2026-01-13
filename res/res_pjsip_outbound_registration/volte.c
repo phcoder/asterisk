@@ -530,15 +530,16 @@ pj_status_t volte_del_authorization(pjsip_tx_data *tdata)
 pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_state)
 {
 	pj_status_t status;
-	int old_port_c;
+	int old_port_c, old_port_s;
 
 	/* Cleanup IPSec transform. */
 	volte_cleanup_xfrm(transport_state);
 
 	/* Cleanup old transport. */
-	if (transport_state->volte.tp_factory) {
+	old_port_s = pj_sockaddr_get_port(&transport_state->volte.local_addr_s);
+	if (old_port_s > 0 && old_port_s < 65535 && transport_state->volte.transport) {
 		/* Create factory with original transport port. */
-		status = pjsip_tcp_transport_restart(transport_state->volte.tp_factory,
+		status = pjsip_tcp_transport_restart(transport_state->volte.transport->factory,
 						     &transport_state->volte.local_addr_orig, NULL);
 		if (status != PJ_SUCCESS) {
 			ast_log(LOG_ERROR, "Failed to change server connection addresses (errno=%d).\n", errno);
@@ -554,7 +555,7 @@ pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_stat
 			return status;
 		}
 		status = transport_state->volte.transport->connect_new_sock(transport_state->volte.transport,
-				&transport_state->volte.local_addr_orig, &transport_state->volte.remote_addr_orig);
+				&transport_state->volte.local_addr_c, &transport_state->volte.remote_addr_orig);
 		if (status != PJ_SUCCESS) {
 			ast_log(LOG_ERROR, "Failed to change connection addresses (errno=%d).\n", errno);
 			return status;
@@ -567,30 +568,6 @@ pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_stat
 		memset(&transport_state->volte.tp_factory->c_local_addr, 0, sizeof(transport_state->volte.tp_factory->c_local_addr));
 		memset(&transport_state->volte.tp_factory->c_remote_addr, 0, sizeof(transport_state->volte.tp_factory->c_remote_addr));
 		transport_state->volte.tp_factory = NULL;
-	}
-
-	return PJ_SUCCESS;
-}
-
-/* Reset old transport and clear IPSec transformations */
-pj_status_t volte_reset_transport_factory(struct ast_sip_transport_state *transport_state)
-{
-	pj_status_t status;
-
-	/* Cleanup IPSec transform. */
-	volte_cleanup_xfrm(transport_state);
-
-	/* Reset transport addresses. */
-	if (transport_state->volte.tp_factory) {
-		/* Create factory with original transport port. */
-		status = pjsip_tcp_transport_restart(transport_state->volte.tp_factory,
-						     &transport_state->volte.local_addr_orig, NULL);
-
-		memset(&transport_state->volte.tp_factory->c_local_addr, 0, sizeof(transport_state->volte.tp_factory->c_local_addr));
-		memset(&transport_state->volte.tp_factory->c_remote_addr, 0, sizeof(transport_state->volte.tp_factory->c_remote_addr));
-		transport_state->volte.tp_factory = NULL;
-
-		return status;
 	}
 
 	return PJ_SUCCESS;

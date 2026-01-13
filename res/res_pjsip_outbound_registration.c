@@ -1555,7 +1555,6 @@ static void registration_transport_shutdown_cb(void *obj)
 		}
 		/* Remove transport reference from volte process. */
 		if (!get_endpoint_transport_transport_state(state->client_state, NULL, NULL, &transport_state)) {
-			volte_reset_transport_factory(transport_state);
 			transport_state->volte.transport = NULL;
 			ao2_cleanup(transport_state);
 		}
@@ -2913,10 +2912,6 @@ static int unregister_task(void *obj)
 	cancel_registration(state->client_state);
 
 	if (state->client_state->volte) {
-		struct ast_sip_transport_state *transport_state = NULL;
-		if (!get_endpoint_transport_transport_state(state->client_state, NULL, NULL, &transport_state) && transport_state) {
-			volte_reset_transport_factory(transport_state);
-		}
 		volte_set_state(state->client_state, VOLTE_STATE_UNREGISTER);
 	}
 
