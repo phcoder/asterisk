@@ -24,6 +24,7 @@ pj_status_t volte_add_sec_agree(pjsip_tx_data *tdata);
 pj_status_t volte_init_authorization(pjsip_tx_data *tdata, const char *fromdomain, const char *username);
 pj_status_t volte_del_authorization(pjsip_tx_data *tdata);
 pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_state);
+pj_status_t volte_reset_transport_factory(struct ast_sip_transport_state *transport_state);
 pj_status_t volte_alloc_transport(struct ast_sip_transport_state *transport_state);
 pj_status_t volte_add_security_client(struct ast_sip_transport_state *transport_state, pjsip_tx_data *tdata);
 pj_status_t volte_set_transport(struct ast_sip_transport_state *transport_state, pjsip_tx_data *tdata,
