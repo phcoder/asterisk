@@ -1555,6 +1555,7 @@ static void registration_transport_shutdown_cb(void *obj)
 		}
 		/* Remove transport reference from volte process. */
 		if (!get_endpoint_transport_transport_state(state->client_state, NULL, NULL, &transport_state)) {
+			volte_reset_transport_factory(transport_state);
 			transport_state->volte.transport = NULL;
 			ao2_cleanup(transport_state);
 		}
@@ -2918,6 +2919,14 @@ static int unregister_task(void *obj)
 	if (pjsip_regc_unregister(client, &tdata) == PJ_SUCCESS
 		&& add_configured_supported_headers(state->client_state, tdata)) {
 		registration_client_send(state->client_state, tdata);
+	}
+
+	if (state->client_state->volte) {
+		struct ast_sip_transport_state *transport_state = NULL;
+		if (!get_endpoint_transport_transport_state(state->client_state, NULL, NULL, &transport_state) && transport_state) {
+			volte_reset_transport_factory(transport_state);
+			ao2_cleanup(transport_state);
+		}
 	}
 
 	ao2_ref(state, -1);
