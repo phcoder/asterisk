@@ -889,6 +889,27 @@ static int volte_send_rp_data(struct msg_data *mdata, const char *orig_uri, stru
 {
 	pjsip_tx_data *tdata;
 	char uri[512];
+	struct ast_sip_transport *transport;
+	int registered = 0;
+
+	transport = ast_sorcery_retrieve_by_id(ast_sip_get_sorcery(), "transport",
+					       endpoint->transport);
+	if (transport) {
+		struct ast_sip_transport_state *trans_state;
+
+		trans_state = ast_sip_get_transport_state(ast_sorcery_object_get_id(transport));
+		if (trans_state) {
+			/* No locking, this is atomic. */
+			registered = trans_state->volte.registered;
+		}
+		ao2_cleanup(trans_state);
+	}
+	ao2_cleanup(transport);
+
+	if (!registered) {
+		ast_log(LOG_NOTICE, "No VoLTE transport or no registered endpoint '%s'\n", ast_sorcery_object_get_id(endpoint));
+		return -1;
+	}
 
 	if (ast_sip_create_request("MESSAGE", NULL, endpoint, endpoint->smsc_uri, NULL, &tdata)) {
 		ast_log(LOG_WARNING, "PJSIP MESSAGE - Could not create request\n");
