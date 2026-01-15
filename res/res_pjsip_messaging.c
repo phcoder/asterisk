@@ -1039,12 +1039,6 @@ static int volte_send_sms(struct ast_sip_endpoint *endpoint, const char *orig_ur
 	static uint8_t ref = 1;  // TODO: start at random
 	static uint8_t mr = 0;
 
-	if (!endpoint->smsc_uri || !endpoint->smsc_uri[0])
-	{
-		ast_log(LOG_ERROR, "VoLTE SMS - no SMSC specified\n");
-		return -1;
-	}
-
 	const unsigned char *utf8 = (const unsigned char *) ast_msg_get_body(mdata->msg);
 	unsigned short *utf16p = utf16;
 	while (*utf8 && utf16p - utf16 < sizeof(utf16) / sizeof(utf16[0]) - 2)
@@ -1233,7 +1227,9 @@ static int msg_send(void *data)
 
 	const char *msg_to_orig = ast_msg_get_to(mdata->msg);
 
-	if (endpoint->volte && is_uri_phone(msg_to_orig && msg_to_orig[0] ? msg_to_orig : uri)) {
+	if (endpoint->volte &&
+	    endpoint->smsc_uri && endpoint->smsc_uri[0] &&
+	    is_uri_phone(msg_to_orig && msg_to_orig[0] ? msg_to_orig : uri)) {
 		return volte_send_sms(endpoint, uri, mdata);
 	}
 

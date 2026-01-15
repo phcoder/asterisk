@@ -223,6 +223,9 @@
 				<configOption name="accesstype">
 					<synopsis>Set +g.3gpp.accesstype in contact header for VoLTE calls, if given.</synopsis>
 				</configOption>
+				<configOption name="receive_sms">
+					<synopsis>Enable VoLTE-style SMS reception.</synopsis>
+				</configOption>
 			</configObject>
 		</configFile>
 	</configInfo>
@@ -414,6 +417,8 @@ struct sip_outbound_registration {
 	unsigned int volte;
 	/*! \brief Enable IPSec encryption support for VoLTE */
 	unsigned int ipsec_encryption;
+	/*! \brief Enable SMS reception for VoLTE */
+	pj_bool_t receive_sms;
 };
 
 /*! \brief States of the VoLTE registration process */
@@ -2674,7 +2679,7 @@ static int sip_outbound_registration_regc_alloc(void *data)
 	if (registration->volte) {
 		ast_pbx_uuid_get(uuid_buf, sizeof(uuid_buf));
 		contact_user = S_OR(registration->contact_user, uuid_buf);
-		contact_header_params = volte_add_contact_params(registration->imei, registration->accesstype);
+		contact_header_params = volte_add_contact_params(registration->imei, registration->accesstype, registration->receive_sms);
 	} else {
 		contact_user = S_OR(registration->contact_user, "s");
 		contact_header_params = registration->contact_header_params;
@@ -3759,6 +3764,7 @@ static int load_module(void)
 	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "volte", "no", OPT_BOOL_T, 1, FLDSET(struct sip_outbound_registration, volte));
 	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "imei", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct sip_outbound_registration, imei));
 	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "accesstype", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct sip_outbound_registration, accesstype));
+	ast_sorcery_object_field_register(ast_sip_get_sorcery(), "registration", "receive_sms", "yes", OPT_BOOL_T, 1, FLDSET(struct sip_outbound_registration, receive_sms));
 
 	/*
 	 * Register sorcery observers.
