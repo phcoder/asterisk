@@ -141,6 +141,49 @@ const pjsip_method pjsip_message_method = {PJSIP_OTHER_METHOD, {"MESSAGE", 7} };
 
 static struct ast_taskprocessor *message_serializer;
 
+static const char *volte_msg_contact_params[] = {
+	NULL
+};
+
+static void volte_add_contact_params(pjsip_tx_data *tdata, pj_bool_t set_user, const char *contact_user, const char **params)
+{
+	pjsip_contact_hdr *contact;
+	pjsip_sip_uri *uri;
+	pjsip_param *p;
+	pj_str_t name, value;
+	char uuid_buf[AST_UUID_STR_LEN];
+
+	contact = pjsip_msg_find_hdr(tdata->msg, PJSIP_H_CONTACT, NULL);
+	if (!contact) {
+		return;
+	}
+
+	if (set_user == PJ_TRUE) {
+		uri = pjsip_uri_get_uri(contact->uri);
+		if (uri) {
+			if (contact_user && contact_user[0]) {
+				pj_strdup2(tdata->pool, &uri->user, contact_user);
+			} else {
+				ast_pbx_uuid_get(uuid_buf, sizeof(uuid_buf));
+				pj_strdup2(tdata->pool, &uri->user, uuid_buf);
+			}
+		}
+	}
+
+	while (*params) {
+		p = PJ_POOL_ALLOC_T(tdata->pool, pjsip_param);
+		if (!p) {
+			ast_log(LOG_ERROR, "No memory\n");
+			return;
+		}
+		pj_cstr(&name, *params++);
+		pj_cstr(&value, *params++);
+		p->name = name;
+		p->value = value;
+		pj_list_insert_before(&contact->other_param, p);
+	}
+}
+
 /*!
  * \internal
  * \brief Checks to make sure the request has the correct content type.
@@ -514,12 +557,11 @@ static pj_status_t send_rpack(pjsip_rx_data *rdata, unsigned char ack_ref)
 	ast_sip_add_header(tdata, "Require", "sec-agree");
 	ast_sip_add_header(tdata, "Proxy-Require", "sec-agree");
 	ast_sip_add_header(tdata, "Supported", "path, sec-agree");
-	if (endpoint->fromuser && endpoint->fromdomain)
-	{
-		char p_preferred_identity[512];
-		snprintf(p_preferred_identity, sizeof(p_preferred_identity), "<sip:%s@%s>", endpoint->fromuser, endpoint->fromdomain);
-		ast_sip_add_header(tdata, "P-Preferred-Identity", p_preferred_identity);
-	}
+
+	ast_sip_add_header(tdata, "P-Preferred-Identity", transport_state->volte.p_associated_uri);
+	ast_sip_update_from(tdata, transport_state->volte.p_associated_uri);
+	volte_add_contact_params(tdata, PJ_TRUE, endpoint->contact_user,
+				 volte_msg_contact_params);
 
 	pjsip_cid_hdr *call_id_hdr = (pjsip_cid_hdr*) pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_CALL_ID, NULL);
 	if (call_id_hdr) {
@@ -948,12 +990,10 @@ static int volte_send_rp_data(struct msg_data *mdata, const char *orig_uri, stru
 	ast_sip_add_header(tdata, "Proxy-Require", "sec-agree");
 	ast_sip_add_header(tdata, "Supported", "path, sec-agree");
 
-	if (endpoint->fromuser && endpoint->fromdomain)
-	{
-		char from_uri[512];
-		snprintf(from_uri, sizeof(from_uri), "<sip:%s@%s>", endpoint->fromuser, endpoint->fromdomain);
-		ast_sip_add_header(tdata, "P-Preferred-Identity", from_uri);
-	}
+	ast_sip_add_header(tdata, "P-Preferred-Identity", transport_state->volte.p_associated_uri);
+	ast_sip_update_from(tdata, transport_state->volte.p_associated_uri);
+	volte_add_contact_params(tdata, PJ_TRUE, endpoint->contact_user,
+				 volte_msg_contact_params);
 
 	ast_sip_add_header(tdata, "Allow", "MESSAGE");
 	ast_sip_add_header(tdata, "Request-Disposition", "no-fork");
