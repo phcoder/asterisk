@@ -497,6 +497,14 @@ static pj_status_t add_value_string_hdr(pjsip_tx_data *tdata, const pj_str_t *na
 	return PJ_SUCCESS;
 }
 
+static void set_preferred_identity(pjsip_tx_data *tdata, const char *uri)
+{
+	char bracket_uri[1026];
+
+	snprintf(bracket_uri, sizeof(bracket_uri), "<%s>", uri);
+	ast_sip_add_header(tdata, "P-Preferred-Identity", bracket_uri);
+}
+
 static pj_status_t send_rpack(pjsip_rx_data *rdata, unsigned char ack_ref)
 {
 	pj_status_t status;
@@ -532,8 +540,6 @@ static pj_status_t send_rpack(pjsip_rx_data *rdata, unsigned char ack_ref)
 		return status;
 	}
 
-	ast_sip_update_to_uri(tdata, addr_buf);
-
 	ao2_lock(transport_state);
 
 	if (transport_state->service_routes) {
@@ -558,7 +564,7 @@ static pj_status_t send_rpack(pjsip_rx_data *rdata, unsigned char ack_ref)
 	ast_sip_add_header(tdata, "Proxy-Require", "sec-agree");
 	ast_sip_add_header(tdata, "Supported", "path, sec-agree");
 
-	ast_sip_add_header(tdata, "P-Preferred-Identity", transport_state->volte.p_associated_uri);
+	set_preferred_identity(tdata, transport_state->volte.p_associated_uri);
 	ast_sip_update_from(tdata, transport_state->volte.p_associated_uri);
 	volte_add_contact_params(tdata, PJ_TRUE, endpoint->contact_user,
 				 volte_msg_contact_params);
@@ -930,7 +936,6 @@ static pj_bool_t is_uri_phone(const char *uri)
 static int volte_send_rp_data(struct msg_data *mdata, const char *orig_uri, struct ast_sip_endpoint *endpoint, const unsigned char *buf, size_t buflen)
 {
 	pjsip_tx_data *tdata;
-	char uri[512];
 	struct ast_sip_transport *transport;
 	int registered = 0;
 
@@ -957,8 +962,6 @@ static int volte_send_rp_data(struct msg_data *mdata, const char *orig_uri, stru
 		ast_log(LOG_WARNING, "PJSIP MESSAGE - Could not create request\n");
 		return -1;
 	}
-
-	ast_sip_update_to_uri(tdata, uri);
 
 	struct ast_sip_transport_state *transport_state = ast_sip_get_transport_state(endpoint->transport);
 	if (!transport_state) {
@@ -990,7 +993,7 @@ static int volte_send_rp_data(struct msg_data *mdata, const char *orig_uri, stru
 	ast_sip_add_header(tdata, "Proxy-Require", "sec-agree");
 	ast_sip_add_header(tdata, "Supported", "path, sec-agree");
 
-	ast_sip_add_header(tdata, "P-Preferred-Identity", transport_state->volte.p_associated_uri);
+	set_preferred_identity(tdata, transport_state->volte.p_associated_uri);
 	ast_sip_update_from(tdata, transport_state->volte.p_associated_uri);
 	volte_add_contact_params(tdata, PJ_TRUE, endpoint->contact_user,
 				 volte_msg_contact_params);
