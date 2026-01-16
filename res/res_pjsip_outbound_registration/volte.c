@@ -576,13 +576,10 @@ pj_status_t volte_reset_transport(struct ast_sip_transport_state *transport_stat
 	return PJ_SUCCESS;
 }
 
-/* Reset old transport and clear IPSec transformations */
+/* Reset old transport */
 pj_status_t volte_reset_transport_factory(struct ast_sip_transport_state *transport_state)
 {
 	pj_status_t status;
-
-	/* Cleanup IPSec transform. */
-	volte_cleanup_xfrm(transport_state);
 
 	/* Reset transport addresses. */
 	if (transport_state->volte.tp_factory) {
