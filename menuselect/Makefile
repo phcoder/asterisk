@@ -24,7 +24,7 @@ endif
 OBJS:=menuselect.o strcompat.o
 # Adding -Wdeprecated-declarations to deal with internal deprecation warnings
 # from gtk+ for GTypeDebugFlags and GTimeVal deprecated in later glib versions
-CFLAGS+=-g -D_GNU_SOURCE -Wno-deprecated-declarations
+CFLAGS+=-g -D_GNU_SOURCE -Wall -Wno-deprecated-declarations
 
 ifneq ($(findstring dragonfly,$(OSARCH)),)
   CFLAGS += -isystem /usr/local/include
@@ -37,8 +37,6 @@ endif
 ifeq ($(MENUSELECT_DEBUG),yes)
   CFLAGS += -DMENUSELECT_DEBUG
 endif
-
-  CFLAGS += -Wno-error
 
 ifdef NCURSES_LIB
   C_OBJS += menuselect_curses.o
@@ -58,7 +56,7 @@ else
   endif
 endif
 
-ifdef _______________
+ifdef GTK2_LIB
   G_OBJS += menuselect_gtk.o
   G_LIBS += $(GTK2_LIB)
   G_INCLUDE += $(GTK2_INCLUDE)
