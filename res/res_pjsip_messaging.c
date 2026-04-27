@@ -1292,8 +1292,12 @@ static int msg_send(void *data)
 	const char *msg_to_orig = ast_msg_get_to(mdata->msg);
 
 	if (endpoint->volte &&
-	    endpoint->smsc_uri && endpoint->smsc_uri[0] &&
 	    is_uri_phone(msg_to_orig && msg_to_orig[0] ? msg_to_orig : uri)) {
+		if (!endpoint->smsc_uri || endpoint->smsc_uri[0] == 0) {
+			ast_log(LOG_ERROR,
+				"PJSIP MESSAGE - Attempt to send SMS on VoLTE without SMS URI set\n");
+			return -1;
+		}
 		return volte_send_sms(endpoint, uri, mdata);
 	}
 
