@@ -2930,6 +2930,7 @@ static int unregister_task(void *obj)
 		struct ast_sip_transport_state *transport_state = NULL;
 		if (!get_endpoint_transport_transport_state(state->client_state, NULL, NULL, &transport_state) && transport_state) {
 			volte_reset_transport_factory(transport_state);
+			ao2_cleanup(transport_state);
 		}
 	}
 
